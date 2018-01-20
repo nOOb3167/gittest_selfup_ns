@@ -62,8 +62,7 @@ class SelfupRespondWork : public SelfupRespond
 {
 public:
 	SelfupRespondWork(const std::shared_ptr<TCPSocket> &sock) :
-		m_sock(sock),
-		m_buf_part()
+		m_sock(sock)
 	{}
 
 protected:
@@ -85,7 +84,7 @@ protected:
 		long long timestamp = selfup_timestamp();
 		const long long deadline = timestamp + SELFUP_LONG_TIMEOUT_MS;
 		long long buf_off = 0;
-		std::string buf(m_buf_part);
+		std::string buf;
 		int rcvt = 0;
 		while (timestamp <= deadline) {
 			/* decide how much data to wait for*/
@@ -104,8 +103,9 @@ protected:
 				wait_for = (9 + sz) - buf_off;
 				/* but we might have enough data already - so see if we can output */
 				if (buf_off >= 9 + sz) {
+					/* thanks to the wait_for mechanism should have exactly enough data - no leftover */
+					assert(buf_off == 9 + sz);
 					NetworkPacket packet((uint8_t *)&buf[9], sz, networkpacket_buf_len_tag_t());
-					m_buf_part = buf.substr(9 + sz, std::string::npos);
 					return std::move(packet);
 				}
 			}
@@ -126,7 +126,6 @@ protected:
 
 private:
 	std::shared_ptr<TCPSocket> m_sock;
-	std::string m_buf_part;
 };
 
 class SelfupWork
