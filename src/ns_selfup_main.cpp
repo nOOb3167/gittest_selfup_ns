@@ -19,6 +19,10 @@
 #define GS_MAX(x, y) (((x) > (y)) ? (x) : (y))
 #define GS_MIN(x, y) (((x) < (y)) ? (x) : (y))
 
+#define SELFUP_ARG_CHILD "--xchild"
+#define SELFUP_ARG_VERSUB "--xversub"
+#define SELFUP_ARG_VERSUB_SUCCESS_CODE 42
+
 #define SELFUP_FRAME_SIZE_MAX (256 * 1024 * 1024)
 #define SELFUP_LONG_TIMEOUT_MS (30 * 1000)
 
@@ -107,6 +111,23 @@ long long selfup_timestamp()
 class SelfupConExt
 {
 public:
+	SelfupConExt(const std::string &cur_exe_filename) :
+		m_cur_exe_filename(cur_exe_filename),
+		m_update_have(false),
+		m_update_buffer()
+	{}
+
+	void confirmUpdate(std::unique_ptr<std::string> update_buffer)
+	{
+		m_update_have = true;
+		m_update_buffer = std::move(update_buffer);
+	}
+
+public:
+	std::string                  m_cur_exe_filename;
+
+	bool                         m_update_have;
+	std::unique_ptr<std::string> m_update_buffer;
 };
 
 class SelfupRespond
@@ -200,12 +221,12 @@ private:
 class SelfupWork
 {
 public:
-	SelfupWork(Address addr) :
+	SelfupWork(std::shared_ptr<SelfupConExt> ext, Address addr) :
 		m_sock(new TCPSocket()),
 		m_respond(new SelfupRespondWork(m_sock)),
 		m_thread(),
 		m_thread_exc(),
-		m_ext(new SelfupConExt())
+		m_ext(ext)
 	{
 		m_sock->Connect(addr);
 		m_thread.reset(new std::thread(&SelfupWork::threadFunc, this));
@@ -233,10 +254,9 @@ public:
 		git_oid res_latest_oid = {};
 		git_oid_fromraw(&res_latest_oid, (const unsigned char *) res_latest_pkt.inSizedStr(GIT_OID_RAWSZ));
 
-		std::string cur_exe_filename = ns_filesys::current_executable_filename();
 		git_oid oid_cur_exe = {};
 		/* empty as_path parameter means no filters applied */
-		if (!! git_repository_hashfile(&oid_cur_exe, memory_repository.get(), cur_exe_filename.c_str(), GIT_OBJ_BLOB, ""))
+		if (!! git_repository_hashfile(&oid_cur_exe, memory_repository.get(), m_ext->m_cur_exe_filename.c_str(), GIT_OBJ_BLOB, ""))
 			throw std::runtime_error("hash");
 
 		if (git_oid_cmp(&oid_cur_exe, &res_latest_oid) == 0)
@@ -259,7 +279,11 @@ public:
 
 		unique_ptr_gitblob blob(selfup_git_blob_lookup(memory_repository.get(), &res_blob_oid), deleteGitblob);
 
-		std::unique_ptr<std::string> buffer_update(new std::string((char *) git_blob_rawcontent(blob.get()), git_blob_rawsize(blob.get())));
+		std::unique_ptr<std::string> update_buffer(new std::string((char *) git_blob_rawcontent(blob.get()), git_blob_rawsize(blob.get())));
+
+		m_ext->confirmUpdate(std::move(update_buffer));
+
+		return;
 	}
 
 	void join()
@@ -282,13 +306,57 @@ private:
 	std::unique_ptr<SelfupRespond> m_respond;
 	std::unique_ptr<std::thread> m_thread;
 	std::exception_ptr           m_thread_exc;
-	std::unique_ptr<SelfupConExt> m_ext;
+	std::shared_ptr<SelfupConExt> m_ext;
 };
+
+void selfup_dryrun(std::string exe_filename)
+{
+	std::string arg(SELFUP_ARG_VERSUB);
+	std::string command;
+	command.append(exe_filename);
+	command.append(" ");
+	command.append(arg);
+
+	int ret = system(command.c_str());
+
+	if (ret != SELFUP_ARG_VERSUB_SUCCESS_CODE)
+		throw std::runtime_error("");
+}
+
+void selfup_reexec_probably_blocking(std::string exe_filename)
+{
+	std::string arg(SELFUP_ARG_CHILD);
+	std::string command;
+	command.append(exe_filename);
+	command.append(" ");
+	command.append(arg);
+
+	int ret_ignored = system(command.c_str());
+}
 
 void selfup_start_crank(Address addr)
 {
-	std::unique_ptr<SelfupWork> work(new SelfupWork(addr));
+	std::string cur_exe_filename = ns_filesys::current_executable_filename();
+	std::shared_ptr<SelfupConExt> ext(new SelfupConExt(cur_exe_filename));
+	std::unique_ptr<SelfupWork> work(new SelfupWork(ext, addr));
 	work->join();
+
+	if (! ext->m_update_have)
+		return;
+
+	std::string temp_filename = ns_filesys::build_modified_filename(
+		cur_exe_filename, "", ".exe", "_helper", ".exe");
+	std::string old_filename = ns_filesys::build_modified_filename(
+		cur_exe_filename, "", ".exe", "_helper_old", ".exe");
+
+	ns_filesys::file_write_frombuffer(temp_filename, ext->m_update_buffer->data(), ext->m_update_buffer->size());
+
+	selfup_dryrun(temp_filename);
+
+	ns_filesys::rename_file_file(cur_exe_filename, old_filename);
+	ns_filesys::rename_file_file(temp_filename, cur_exe_filename);
+
+	selfup_reexec_probably_blocking(cur_exe_filename);
 }
 
 int main(int argc, char **argv)
