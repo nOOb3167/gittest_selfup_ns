@@ -13,7 +13,9 @@ struct networkpacket_cmd_tag_t {};
 class ProtocolExc : public std::runtime_error
 {
 public:
-	ProtocolExc(const char *msg);
+	ProtocolExc(const char *msg) :
+		std::runtime_error(msg)
+	{}
 };
 
 class NetworkPacket
@@ -30,6 +32,7 @@ public:
 	NetworkPacket& operator=(NetworkPacket &&a) = default;
 
 	NetworkPacket copyReset();
+	bool isReset();
 
 	uint8_t * getDataPtr();
 	size_t getDataSize();

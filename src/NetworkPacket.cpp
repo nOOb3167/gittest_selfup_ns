@@ -27,6 +27,11 @@ NetworkPacket NetworkPacket::copyReset()
 	return packet;
 }
 
+bool NetworkPacket::isReset()
+{
+	return m_off == 0;
+}
+
 uint8_t * NetworkPacket::getDataPtr()
 {
 	return m_data.data();
