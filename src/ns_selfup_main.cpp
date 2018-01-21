@@ -143,10 +143,10 @@ long long selfup_timestamp()
 	return (tspec.tv_sec * 1000) + (tspec.tv_nsec / (1000 * 1000));
 }
 
-class SelfupConExt
+class SelfupConExt1
 {
 public:
-	SelfupConExt(const std::string &cur_exe_filename) :
+	SelfupConExt1(const std::string &cur_exe_filename) :
 		m_cur_exe_filename(cur_exe_filename),
 		m_update_have(false),
 		m_update_buffer()
@@ -256,12 +256,11 @@ private:
 class SelfupWork
 {
 public:
-	SelfupWork(std::shared_ptr<SelfupConExt> ext, Address addr) :
+	SelfupWork(Address addr) :
 		m_sock(new TCPSocket()),
 		m_respond(new SelfupRespondWork(m_sock)),
 		m_thread(),
-		m_thread_exc(),
-		m_ext(ext)
+		m_thread_exc()
 	{
 		m_sock->Connect(addr);
 		m_thread.reset(new std::thread(&SelfupWork::threadFunc, this));
@@ -270,14 +269,37 @@ public:
 	void threadFunc()
 	{
 		try {
-			threadFunc2();
+			virtualThreadFunc();
 		}
 		catch (std::exception &) {
 			m_thread_exc = std::current_exception();
 		}
 	}
 
-	void threadFunc2()
+	virtual void virtualThreadFunc() = 0;
+
+	void join()
+	{
+		if (m_thread_exc)
+			std::rethrow_exception(m_thread_exc);
+	}
+
+protected:
+	std::shared_ptr<TCPSocket>     m_sock;
+	std::unique_ptr<SelfupRespond> m_respond;
+	std::unique_ptr<std::thread> m_thread;
+	std::exception_ptr           m_thread_exc;
+};
+
+class SelfupWork1 : public SelfupWork
+{
+public:
+	SelfupWork1(Address addr, std::shared_ptr<SelfupConExt1> ext) :
+		SelfupWork(addr),
+		m_ext(ext)
+	{}
+
+	void virtualThreadFunc() override
 	{
 		unique_ptr_gitrepository memory_repository(selfup_git_memory_repository_new(), deleteGitrepository);
 
@@ -321,12 +343,6 @@ public:
 		return;
 	}
 
-	void join()
-	{
-		if (m_thread_exc)
-			std::rethrow_exception(m_thread_exc);
-	}
-
 	void readEnsureCmd(NetworkPacket *packet, uint8_t cmdid)
 	{
 		assert(packet->isReset());
@@ -337,11 +353,7 @@ public:
 	}
 
 private:
-	std::shared_ptr<TCPSocket>     m_sock;
-	std::unique_ptr<SelfupRespond> m_respond;
-	std::unique_ptr<std::thread> m_thread;
-	std::exception_ptr           m_thread_exc;
-	std::shared_ptr<SelfupConExt> m_ext;
+	std::shared_ptr<SelfupConExt1> m_ext;
 };
 
 void selfup_dryrun(std::string exe_filename)
@@ -400,8 +412,8 @@ void selfup_checkout(std::string repopath, std::string refname, std::string chec
 void selfup_start_crank(Address addr)
 {
 	std::string cur_exe_filename = ns_filesys::current_executable_filename();
-	std::shared_ptr<SelfupConExt> ext(new SelfupConExt(cur_exe_filename));
-	std::unique_ptr<SelfupWork> work(new SelfupWork(ext, addr));
+	std::shared_ptr<SelfupConExt1> ext(new SelfupConExt1(cur_exe_filename));
+	std::unique_ptr<SelfupWork1> work(new SelfupWork1(addr, ext));
 	work->join();
 
 	if (! ext->m_update_have)
