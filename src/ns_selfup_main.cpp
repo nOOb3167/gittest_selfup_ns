@@ -33,6 +33,8 @@
 
 typedef ::std::unique_ptr<git_repository, void(*)(git_repository *)> unique_ptr_gitrepository;
 typedef ::std::unique_ptr<git_blob, void(*)(git_blob *)> unique_ptr_gitblob;
+typedef ::std::unique_ptr<git_commit, void(*)(git_commit *)> unique_ptr_gitcommit;
+typedef ::std::unique_ptr<git_tree, void(*)(git_tree *)> unique_ptr_gittree;
 typedef ::std::unique_ptr<git_odb, void(*)(git_odb *)> unique_ptr_gitodb;
 
 void deleteGitrepository(git_repository *p)
@@ -45,6 +47,16 @@ void deleteGitblob(git_blob *p)
 	if (p)
 		git_blob_free(p);
 }
+void deleteGitcommit(git_commit *p)
+{
+	if (p)
+		git_commit_free(p);
+}
+void deleteGittree(git_tree *p)
+{
+	if (p)
+		git_tree_free(p);
+}
 void deleteGitodb(git_odb *p)
 {
 	if (p)
@@ -55,6 +67,13 @@ git_repository * selfup_git_repository_new()
 	/* https://github.com/libgit2/libgit2/blob/master/include/git2/sys/repository.h */
 	git_repository *p = NULL;
 	if (!! git_repository_new(&p))
+		throw std::runtime_error("repository new");
+	return p;
+}
+git_repository * selfup_git_repository_open(std::string path)
+{
+	git_repository *p = NULL;
+	if (!! git_repository_open(&p, path.c_str()))
 		throw std::runtime_error("repository new");
 	return p;
 }
@@ -90,6 +109,22 @@ git_blob * selfup_git_blob_lookup(git_repository *repository, git_oid *oid)
 	git_blob *p = NULL;
 	if (!! git_blob_lookup(&p, repository, oid))
 		throw std::runtime_error("blob lookup");
+	return p;
+}
+git_commit * selfup_git_commit_lookup(git_repository *repository, git_oid *oid)
+{
+	// FIXME: not sure if GIT_ENOTFOUND return counts as official API for git_commit_lookup
+	//        but may be useful as optional extra failure information ?
+	git_commit *p = NULL;
+	if (!! git_commit_lookup(&p, repository, oid))
+		throw std::runtime_error("commit lookup");
+	return p;
+}
+git_tree * selfup_git_commit_tree(git_repository *repository, git_commit *commit)
+{
+	git_tree *p = NULL;
+	if (!! git_commit_tree(&p, commit))
+		throw std::runtime_error("tree lookup");
 	return p;
 }
 
@@ -332,6 +367,34 @@ void selfup_reexec_probably_blocking(std::string exe_filename)
 	command.append(arg);
 
 	int ret_ignored = system(command.c_str());
+}
+
+void selfup_checkout(std::string repopath, std::string refname, std::string checkoutpath)
+{
+	unique_ptr_gitrepository repo(selfup_git_repository_open(repopath), deleteGitrepository);
+
+	git_oid commit_head_oid = {};
+
+	if (!! git_reference_name_to_id(&commit_head_oid, repo.get(), refname.c_str()))
+		throw std::runtime_error("refname id");
+
+	unique_ptr_gitcommit commit_head(selfup_git_commit_lookup(repo.get(), &commit_head_oid), deleteGitcommit);
+	unique_ptr_gittree   commit_tree(selfup_git_commit_tree(repo.get(), commit_head.get()), deleteGittree);
+
+	ns_filesys::directory_create_unless_exist(checkoutpath);
+
+	git_checkout_options opts = GIT_CHECKOUT_OPTIONS_INIT;
+	opts.checkout_strategy = 0;
+	opts.checkout_strategy |= GIT_CHECKOUT_FORCE;
+	// FIXME: want this flag but bugs have potential to cause more damage - enable after enough testing
+	//opts.checkout_strategy |= GIT_CHECKOUT_REMOVE_UNTRACKED;
+
+	opts.disable_filters = 1;
+	opts.target_directory = checkoutpath.c_str();
+
+	/* https://libgit2.github.com/docs/guides/101-samples/#objects_casting */
+	if (!! git_checkout_tree(repo.get(), (git_object *) commit_tree.get(), &opts))
+		throw std::runtime_error("checkout tree");
 }
 
 void selfup_start_crank(Address addr)

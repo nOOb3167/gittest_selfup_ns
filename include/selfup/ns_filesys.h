@@ -33,6 +33,8 @@ void rename_file_file(
 	std::string src_filename,
 	std::string dst_filename);
 
-};
+void directory_create_unless_exist(std::string dirname);
+
+}
 
 #endif /* _NS_FILESYS_H_ */

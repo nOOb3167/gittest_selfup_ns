@@ -97,4 +97,14 @@ void rename_file_file(
 		throw FilesysExc("rename");
 }
 
+void directory_create_unless_exist(std::string dirname)
+{
+	if (! CreateDirectory(dirname.c_str(), NULL)) {
+		DWORD Error = GetLastError();
+		if (Error == ERROR_ALREADY_EXISTS)
+			return;
+		throw FilesysExc("directory create");
+	}
+}
+
 }
