@@ -143,28 +143,6 @@ long long selfup_timestamp()
 	return (tspec.tv_sec * 1000) + (tspec.tv_nsec / (1000 * 1000));
 }
 
-class SelfupConExt1
-{
-public:
-	SelfupConExt1(const std::string &cur_exe_filename) :
-		m_cur_exe_filename(cur_exe_filename),
-		m_update_have(false),
-		m_update_buffer()
-	{}
-
-	void confirmUpdate(std::unique_ptr<std::string> update_buffer)
-	{
-		m_update_have = true;
-		m_update_buffer = std::move(update_buffer);
-	}
-
-public:
-	std::string                  m_cur_exe_filename;
-
-	bool                         m_update_have;
-	std::unique_ptr<std::string> m_update_buffer;
-};
-
 class SelfupRespond
 {
 public:
@@ -289,6 +267,28 @@ protected:
 	std::unique_ptr<SelfupRespond> m_respond;
 	std::unique_ptr<std::thread> m_thread;
 	std::exception_ptr           m_thread_exc;
+};
+
+class SelfupConExt1
+{
+public:
+	SelfupConExt1(const std::string &cur_exe_filename) :
+		m_cur_exe_filename(cur_exe_filename),
+		m_update_have(false),
+		m_update_buffer()
+	{}
+
+	void confirmUpdate(std::unique_ptr<std::string> update_buffer)
+	{
+		m_update_have = true;
+		m_update_buffer = std::move(update_buffer);
+	}
+
+public:
+	std::string                  m_cur_exe_filename;
+
+	bool                         m_update_have;
+	std::unique_ptr<std::string> m_update_buffer;
 };
 
 class SelfupWork1 : public SelfupWork
