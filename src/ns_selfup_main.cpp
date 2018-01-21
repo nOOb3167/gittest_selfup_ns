@@ -356,6 +356,47 @@ private:
 	std::shared_ptr<SelfupConExt1> m_ext;
 };
 
+class SelfupConExt2
+{
+public:
+	SelfupConExt2() :
+		m_update_have(false)
+	{}
+
+	void confirmUpdate()
+	{
+		m_update_have = true;
+	}
+
+public:
+	bool m_update_have;
+};
+
+class SelfupWork2 : public SelfupWork
+{
+public:
+	SelfupWork2(Address addr, std::shared_ptr<SelfupConExt2> ext) :
+		SelfupWork(addr),
+		m_ext(ext)
+	{}
+
+	void virtualThreadFunc() override
+	{
+	}
+
+	void readEnsureCmd(NetworkPacket *packet, uint8_t cmdid)
+	{
+		assert(packet->isReset());
+		uint8_t c;
+		(*packet) >> c;
+		if (c != cmdid)
+			throw ProtocolExc("cmd");
+	}
+
+private:
+	std::shared_ptr<SelfupConExt2> m_ext;
+};
+
 void selfup_dryrun(std::string exe_filename)
 {
 	std::string arg(SELFUP_ARG_VERSUB);
@@ -407,6 +448,16 @@ void selfup_checkout(std::string repopath, std::string refname, std::string chec
 	/* https://libgit2.github.com/docs/guides/101-samples/#objects_casting */
 	if (!! git_checkout_tree(repo.get(), (git_object *) commit_tree.get(), &opts))
 		throw std::runtime_error("checkout tree");
+}
+
+void selfup_start_mainupdate_crank(Address addr)
+{
+	std::shared_ptr<SelfupConExt2> ext(new SelfupConExt2());
+	std::unique_ptr<SelfupWork2> work(new SelfupWork2(addr, ext));
+	work->join();
+
+	if (! ext->m_update_have)
+		return;
 }
 
 void selfup_start_crank(Address addr)
