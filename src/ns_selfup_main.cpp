@@ -37,9 +37,12 @@
 #define SELFUP_CMD_RESPONSE_BLOB_SELFUPDATE 10
 #define SELFUP_CMD_REQUEST_LATEST_SELFUPDATE_BLOB  11
 #define SELFUP_CMD_RESPONSE_LATEST_SELFUPDATE_BLOB 12
-#define SELFUP_CMD_REQUEST_BLOBS3       13
-#define SELFUP_CMD_RESPONSE_BLOBS3      14
-#define SELFUP_CMD_RESPONSE_BLOBS3_DONE 15
+#define SELFUP_CMD_REQUEST_OBJS3       13
+#define SELFUP_CMD_RESPONSE_OBJS3      14
+#define SELFUP_CMD_RESPONSE_OBJS3_DONE 15
+#define SELFUP_CMD_REQUEST_BLOBS3       16
+#define SELFUP_CMD_RESPONSE_BLOBS3      17
+#define SELFUP_CMD_RESPONSE_BLOBS3_DONE 18
 
 typedef ::std::unique_ptr<git_repository, void(*)(git_repository *)> unique_ptr_gitrepository;
 typedef ::std::unique_ptr<git_blob, void(*)(git_blob *)> unique_ptr_gitblob;
@@ -407,6 +410,8 @@ public:
 		git_oid oid_zero = {};
 		unique_ptr_gitrepository repo(selfup_git_repository_open(m_ext->m_repopath), deleteGitrepository);
 
+		/* request latest version git_oid */
+
 		NetworkPacket packet_req_latest(SELFUP_CMD_REQUEST_LATEST_COMMIT_TREE, networkpacket_cmd_tag_t());
 		m_respond->respondOneshot(std::move(packet_req_latest));
 
@@ -414,6 +419,8 @@ public:
 		readEnsureCmd(&res_latest_pkt, SELFUP_CMD_RESPONSE_LATEST_COMMIT_TREE);
 		git_oid res_latest_oid = {};
 		git_oid_fromraw(&res_latest_oid, (const unsigned char *) res_latest_pkt.inSizedStr(GIT_OID_RAWSZ));
+
+		/* determine local version git_oid - defaults to zeroed-out */
 
 		git_oid repo_head_commit_oid = {};
 		if (!! git_reference_name_to_id(&repo_head_commit_oid, repo.get(), m_ext->m_refname.c_str()))
@@ -429,8 +436,12 @@ public:
 			git_oid_cpy(&repo_head_tree_oid, &oid_zero);
 		}
 
+		/* matching versions suggest an update is unnecessary */
+
 		if (git_oid_cmp(&repo_head_tree_oid, &res_latest_oid) == 0)
 			return;
+
+		/* request list of trees comprising latest version */
 
 		NetworkPacket req_treelist_pkt(SELFUP_CMD_REQUEST_TREELIST, networkpacket_cmd_tag_t());
 		req_treelist_pkt.outSizedStr((char *) res_latest_oid.id, GIT_OID_RAWSZ);
@@ -447,7 +458,9 @@ public:
 			res_treelist_treevec.push_back(tmp);
 		}
 
-		std::vector<git_oid> missing_tree_oids;
+		/* determine which trees are missing */
+
+		std::deque<git_oid> missing_tree_oids;
 		for (size_t i = 0; i < res_treelist_treevec.size(); i++) {
 			try {
 				unique_ptr_gittree tree(selfup_git_tree_lookup(repo.get(), &res_treelist_treevec[i]), deleteGittree);
@@ -458,88 +471,119 @@ public:
 			}
 		}
 
-		NetworkPacket req_trees_pkt(SELFUP_CMD_REQUEST_TREES, networkpacket_cmd_tag_t());
-		req_trees_pkt << missing_tree_oids.size();
-		for (size_t i = 0; i < missing_tree_oids.size(); i++)
-			req_trees_pkt.outSizedStr((char *) missing_tree_oids[i].id, GIT_OID_RAWSZ);
-		m_respond->respondOneshot(std::move(req_trees_pkt));
+		/* request missing trees and write received into the repository */
 
-		NetworkPacket res_trees_pkt = m_respond->waitFrame();
-		readEnsureCmd(&res_trees_pkt, SELFUP_CMD_RESPONSE_TREES);
-		uint32_t res_trees_treenum = 0;
-		res_trees_pkt >> res_trees_treenum;
+		size_t missing_tree_request_limit = missing_tree_oids.size();
+		do {
+			NetworkPacket req_trees_pkt(SELFUP_CMD_REQUEST_OBJS3, networkpacket_cmd_tag_t());
+			req_trees_pkt << (uint32_t) missing_tree_request_limit;
+			for (size_t i = 0; i < missing_tree_request_limit; i++)
+				req_trees_pkt.outSizedStr((char *) missing_tree_oids[i].id, GIT_OID_RAWSZ);
+			m_respond->respondOneshot(std::move(req_trees_pkt));
+
+			std::vector<git_oid> received_tree_oids = recvAndWriteObjsUntilDone(repo.get());
+
+			for (size_t i = 0; i < received_tree_oids.size(); i++) {
+				if (missing_tree_oids.empty() || git_oid_cmp(&received_tree_oids[i], &missing_tree_oids.front()) != 0)
+					throw std::runtime_error("unsolicited blob received and written?");
+				missing_tree_oids.pop_front();
+			}
+
+			missing_tree_request_limit = GS_MIN(missing_tree_oids.size(), received_tree_oids.size() * 2);
+		} while (! missing_tree_oids.empty());
+
+		/* determine which blobs are missing - validating trees and their entries in the meantime */
+
+		/* by now all required trees should of been either preexistent or missing but written into the repository.
+		   validating trees comprises of:
+		     - confirming existence of trees themselves
+			 - examining the trees' entries:
+			   - tree entries for existence
+			   - blob entries for existence, recording missing blobs */
+
 		std::deque<git_oid> missing_blob_oids;
-		for (size_t i = 0; i < res_trees_treenum; i++) {
-			/* received missing trees likely contain blobs that are likewise missing
-			   an in-memory repository could be used so writing such trees does not cause data inconsistency */
+
+		for (size_t i = 0; i < res_treelist_treevec.size(); i++) {
 			unique_ptr_gitodb odb(selfup_git_repository_odb(repo.get()), deleteGitodb);
-			uint32_t treesize = 0;
-			res_trees_pkt >> treesize;
-			const char *treedata = res_trees_pkt.inSizedStr(treesize);
-			git_buf inflated = {};
-			git_otype inflated_type = GIT_OBJ_BAD;
-			size_t inflated_offset = 0;
-			size_t inflated_size = 0;
-			if (!! git_memes_inflate(treedata, treesize, &inflated, &inflated_type, &inflated_offset, &inflated_size))
-				throw std::runtime_error("inflate");
-			// FIXME: also compute and possibly check hash?
-			assert(inflated.size == inflated_size);
-			if (inflated_type != GIT_OBJ_TREE)
-				throw std::runtime_error("inflate type");
-			git_oid written_oid = {};
-			if (!! git_odb_write(&written_oid, odb.get(), inflated.ptr + inflated_offset, inflated_size, inflated_type))
-				throw std::runtime_error("inflate write");
-			unique_ptr_gittree tree(selfup_git_tree_lookup(repo.get(), &written_oid), deleteGittree);
+			unique_ptr_gittree tree(selfup_git_tree_lookup(repo.get(), &res_treelist_treevec[i]), deleteGittree);
 			for (size_t j = 0; j < git_tree_entrycount(tree.get()); j++) {
 				const git_tree_entry *entry = git_tree_entry_byindex(tree.get(), j);
-				if (git_tree_entry_type(entry) == GIT_OBJ_TREE)
-					continue;
-				if (git_tree_entry_type(entry) != GIT_OBJ_BLOB)
+				if (git_tree_entry_type(entry) == GIT_OBJ_TREE) {
+					if (! git_odb_exists(odb.get(), git_tree_entry_id(entry)))
+						throw std::runtime_error("entry tree inexistant");
+				}
+				else if (git_tree_entry_type(entry) == GIT_OBJ_BLOB) {
+					if (git_odb_exists(odb.get(), git_tree_entry_id(entry)))
+						continue;
+					missing_blob_oids.push_back(*git_tree_entry_id(entry));
+				}
+				else {
 					throw std::runtime_error("entry type");
-				if (git_odb_exists(odb.get(), git_tree_entry_id(entry)))
-					continue;
-				missing_blob_oids.push_back(*git_tree_entry_id(entry));
+				}
 			}
 		}
 
+		/* request missing blobs and write received into the repository */
+
 		size_t missing_blob_request_limit = missing_blob_oids.size();
-		while (true) {
-			NetworkPacket req_blobs(SELFUP_CMD_REQUEST_BLOBS3, networkpacket_cmd_tag_t());
+		do {
+			NetworkPacket req_blobs(SELFUP_CMD_REQUEST_OBJS3, networkpacket_cmd_tag_t());
 			req_blobs << (uint32_t) missing_blob_request_limit;
 			for (size_t i = 0; i < missing_blob_request_limit; i++)
 				req_blobs.outSizedStr((char *) missing_blob_oids[i].id, GIT_OID_RAWSZ);
 			m_respond->respondOneshot(std::move(req_blobs));
 
-			while (true) {
-				unique_ptr_gitodb odb(selfup_git_repository_odb(repo.get()), deleteGitodb);
-				NetworkPacket res_blobs = m_respond->waitFrame();
-				uint8_t res_blobs_cmd = readGetCmd(&res_blobs);
-				if (res_blobs_cmd == SELFUP_CMD_RESPONSE_BLOBS3) {
-					uint32_t size = 0;
-					res_blobs_cmd >> size;
-					git_buf inflated = {};
-					git_otype inflated_type = GIT_OBJ_BAD;
-					size_t inflated_offset = 0;
-					size_t inflated_size = 0;
-					if (!! git_memes_inflate(res_blobs.inSizedStr(size), size, &inflated, &inflated_type, &inflated_offset, &inflated_size))
-						throw std::runtime_error("inflate");
-					// FIXME: also compute and possibly check hash?
-					//        see git_odb_hash
-					assert(inflated.size == inflated_size);
-					if (inflated_type != GIT_OBJ_BLOB)
-						throw std::runtime_error("inflate type");
-					git_oid written_oid = {};
-					if (!! git_odb_write(&written_oid, odb.get(), inflated.ptr + inflated_offset, inflated_size, inflated_type))
-						throw std::runtime_error("inflate write");
-					if (missing_blob_oids.empty() || git_oid_cmp(&written_oid, &missing_blob_oids.front()) != 0)
-						throw std::runtime_error("wtf (unsolicited blob received ?)");
-					missing_blob_oids.pop_front();
-				}
-				else if (res_blobs_cmd == SELFUP_CMD_RESPONSE_BLOBS3_DONE) {
-					break;
-				}
+			std::vector<git_oid> received_blob_oids = recvAndWriteObjsUntilDone(repo.get());
+
+			for (size_t i = 0; i < received_blob_oids.size(); i++) {
+				if (missing_blob_oids.empty() || git_oid_cmp(&received_blob_oids[i], &missing_blob_oids.front()) != 0)
+					throw std::runtime_error("unsolicited blob received and written?");
+				missing_blob_oids.pop_front();
+			}
+
+			missing_blob_request_limit = GS_MIN(missing_blob_oids.size(), received_blob_oids.size() * 2);
+		} while (! missing_blob_oids.empty());
+
+		/* by now all required blobs should of been either preexistent or missing but written into the repository */
+
+		/* required trees were confirmed present above and required blobs are present within the repository.
+		   supposedly we have correctly received a full update. */
+	}
+
+	std::vector<git_oid> recvAndWriteObjsUntilDone(git_repository *repo)
+	{
+		std::vector<git_oid> received_blob_oids;
+		unique_ptr_gitodb odb(selfup_git_repository_odb(repo), deleteGitodb);
+		while (true) {
+			NetworkPacket res_blobs = m_respond->waitFrame();
+			uint8_t res_blobs_cmd = readGetCmd(&res_blobs);
+			if (res_blobs_cmd == SELFUP_CMD_RESPONSE_OBJS3) {
+				uint32_t size = 0;
+				res_blobs_cmd >> size;
+				git_buf inflated = {};
+				git_otype inflated_type = GIT_OBJ_BAD;
+				size_t inflated_offset = 0;
+				size_t inflated_size = 0;
+				if (!! git_memes_inflate(res_blobs.inSizedStr(size), size, &inflated, &inflated_type, &inflated_offset, &inflated_size))
+					throw std::runtime_error("inflate");
+				if (inflated_type == GIT_OBJ_BAD)
+					throw std::runtime_error("inflate type");
+				assert(inflated.size == inflated_size);
+				// FIXME: compute and check hash before writing?
+				//        see git_odb_hash
+				git_oid written_oid = {};
+				if (!! git_odb_write(&written_oid, odb.get(), inflated.ptr + inflated_offset, inflated_size, inflated_type))
+					throw std::runtime_error("inflate write");
+				received_blob_oids.push_back(written_oid);
+			}
+			else if (res_blobs_cmd == SELFUP_CMD_RESPONSE_OBJS3_DONE) {
+				break;
+			}
+			else {
+				throw std::runtime_error("cmd objs3");
 			}
 		}
+		return received_blob_oids;
 	}
 
 	void readEnsureCmd(NetworkPacket *packet, uint8_t cmdid)
