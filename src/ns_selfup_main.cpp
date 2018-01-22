@@ -27,22 +27,17 @@
 #define SELFUP_FRAME_SIZE_MAX (256 * 1024 * 1024)
 #define SELFUP_LONG_TIMEOUT_MS (30 * 1000)
 
-#define SELFUP_CMD_REQUEST_LATEST_COMMIT_TREE  1
-#define SELFUP_CMD_RESPONSE_LATEST_COMMIT_TREE 2
-#define SELFUP_CMD_REQUEST_TREELIST  3
-#define SELFUP_CMD_RESPONSE_TREELIST 4
-#define SELFUP_CMD_REQUEST_TREES  5
-#define SELFUP_CMD_RESPONSE_TREES 6
-#define SELFUP_CMD_REQUEST_BLOB_SELFUPDATE   9
-#define SELFUP_CMD_RESPONSE_BLOB_SELFUPDATE 10
-#define SELFUP_CMD_REQUEST_LATEST_SELFUPDATE_BLOB  11
-#define SELFUP_CMD_RESPONSE_LATEST_SELFUPDATE_BLOB 12
-#define SELFUP_CMD_REQUEST_OBJS3       13
-#define SELFUP_CMD_RESPONSE_OBJS3      14
-#define SELFUP_CMD_RESPONSE_OBJS3_DONE 15
-#define SELFUP_CMD_REQUEST_BLOBS3       16
-#define SELFUP_CMD_RESPONSE_BLOBS3      17
-#define SELFUP_CMD_RESPONSE_BLOBS3_DONE 18
+#define SELFUP_CMD_REQUEST_LATEST_SELFUPDATE_BLOB  1
+#define SELFUP_CMD_RESPONSE_LATEST_SELFUPDATE_BLOB 2
+#define SELFUP_CMD_REQUEST_BLOB_SELFUPDATE   3
+#define SELFUP_CMD_RESPONSE_BLOB_SELFUPDATE  4
+#define SELFUP_CMD_REQUEST_LATEST_COMMIT_TREE  5
+#define SELFUP_CMD_RESPONSE_LATEST_COMMIT_TREE 6
+#define SELFUP_CMD_REQUEST_TREELIST  7
+#define SELFUP_CMD_RESPONSE_TREELIST 8
+#define SELFUP_CMD_REQUEST_OBJS3        9
+#define SELFUP_CMD_RESPONSE_OBJS3      10
+#define SELFUP_CMD_RESPONSE_OBJS3_DONE 11
 
 typedef ::std::unique_ptr<git_repository, void(*)(git_repository *)> unique_ptr_gitrepository;
 typedef ::std::unique_ptr<git_blob, void(*)(git_blob *)> unique_ptr_gitblob;
@@ -422,11 +417,11 @@ public:
 
 		/* determine local version git_oid - defaults to zeroed-out */
 
-		git_oid repo_head_commit_oid = {};
-		if (!! git_reference_name_to_id(&repo_head_commit_oid, repo.get(), m_ext->m_refname.c_str()))
-			throw std::runtime_error("refname id");
 		git_oid repo_head_tree_oid = {};
 		try {
+			git_oid repo_head_commit_oid = {};
+			if (!! git_reference_name_to_id(&repo_head_commit_oid, repo.get(), m_ext->m_refname.c_str()))
+				throw std::runtime_error("refname id");
 			unique_ptr_gitcommit commit_head(selfup_git_commit_lookup(repo.get(), &repo_head_commit_oid), deleteGitcommit);
 			unique_ptr_gittree   commit_tree(selfup_git_commit_tree(commit_head.get()), deleteGittree);
 			git_oid_cpy(&repo_head_tree_oid, git_tree_id(commit_tree.get()));
@@ -473,24 +468,7 @@ public:
 
 		/* request missing trees and write received into the repository */
 
-		size_t missing_tree_request_limit = missing_tree_oids.size();
-		do {
-			NetworkPacket req_trees_pkt(SELFUP_CMD_REQUEST_OBJS3, networkpacket_cmd_tag_t());
-			req_trees_pkt << (uint32_t) missing_tree_request_limit;
-			for (size_t i = 0; i < missing_tree_request_limit; i++)
-				req_trees_pkt.outSizedStr((char *) missing_tree_oids[i].id, GIT_OID_RAWSZ);
-			m_respond->respondOneshot(std::move(req_trees_pkt));
-
-			std::vector<git_oid> received_tree_oids = recvAndWriteObjsUntilDone(repo.get());
-
-			for (size_t i = 0; i < received_tree_oids.size(); i++) {
-				if (missing_tree_oids.empty() || git_oid_cmp(&received_tree_oids[i], &missing_tree_oids.front()) != 0)
-					throw std::runtime_error("unsolicited blob received and written?");
-				missing_tree_oids.pop_front();
-			}
-
-			missing_tree_request_limit = GS_MIN(missing_tree_oids.size(), received_tree_oids.size() * 2);
-		} while (! missing_tree_oids.empty());
+		requestAndRecvAndWriteObjs(repo.get(), &missing_tree_oids);
 
 		/* determine which blobs are missing - validating trees and their entries in the meantime */
 
@@ -525,29 +503,35 @@ public:
 
 		/* request missing blobs and write received into the repository */
 
-		size_t missing_blob_request_limit = missing_blob_oids.size();
-		do {
-			NetworkPacket req_blobs(SELFUP_CMD_REQUEST_OBJS3, networkpacket_cmd_tag_t());
-			req_blobs << (uint32_t) missing_blob_request_limit;
-			for (size_t i = 0; i < missing_blob_request_limit; i++)
-				req_blobs.outSizedStr((char *) missing_blob_oids[i].id, GIT_OID_RAWSZ);
-			m_respond->respondOneshot(std::move(req_blobs));
-
-			std::vector<git_oid> received_blob_oids = recvAndWriteObjsUntilDone(repo.get());
-
-			for (size_t i = 0; i < received_blob_oids.size(); i++) {
-				if (missing_blob_oids.empty() || git_oid_cmp(&received_blob_oids[i], &missing_blob_oids.front()) != 0)
-					throw std::runtime_error("unsolicited blob received and written?");
-				missing_blob_oids.pop_front();
-			}
-
-			missing_blob_request_limit = GS_MIN(missing_blob_oids.size(), received_blob_oids.size() * 2);
-		} while (! missing_blob_oids.empty());
+		requestAndRecvAndWriteObjs(repo.get(), &missing_blob_oids);
 
 		/* by now all required blobs should of been either preexistent or missing but written into the repository */
 
 		/* required trees were confirmed present above and required blobs are present within the repository.
 		   supposedly we have correctly received a full update. */
+	}
+
+	/* @missing_obj_oids: will be popped as objects are received - empties completely on success */
+	void requestAndRecvAndWriteObjs(git_repository *repo, std::deque<git_oid> *missing_obj_oids)
+	{
+		size_t missing_obj_request_limit = missing_obj_oids->size();
+		do {
+			NetworkPacket req_objs(SELFUP_CMD_REQUEST_OBJS3, networkpacket_cmd_tag_t());
+			req_objs << (uint32_t) missing_obj_request_limit;
+			for (size_t i = 0; i < missing_obj_request_limit; i++)
+				req_objs.outSizedStr((char *) (*missing_obj_oids)[i].id, GIT_OID_RAWSZ);
+			m_respond->respondOneshot(std::move(req_objs));
+
+			std::vector<git_oid> received_obj_oids = recvAndWriteObjsUntilDone(repo);
+
+			for (size_t i = 0; i < received_obj_oids.size(); i++) {
+				if (missing_obj_oids->empty() || git_oid_cmp(&received_obj_oids[i], &missing_obj_oids->front()) != 0)
+					throw std::runtime_error("unsolicited obj received and written?");
+				missing_obj_oids->pop_front();
+			}
+
+			missing_obj_request_limit = GS_MIN(missing_obj_oids->size(), received_obj_oids.size() * 2);
+		} while (! missing_obj_oids->empty());
 	}
 
 	std::vector<git_oid> recvAndWriteObjsUntilDone(git_repository *repo)
@@ -559,7 +543,7 @@ public:
 			uint8_t res_blobs_cmd = readGetCmd(&res_blobs);
 			if (res_blobs_cmd == SELFUP_CMD_RESPONSE_OBJS3) {
 				uint32_t size = 0;
-				res_blobs_cmd >> size;
+				res_blobs >> size;
 				git_buf inflated = {};
 				git_otype inflated_type = GIT_OBJ_BAD;
 				size_t inflated_offset = 0;
