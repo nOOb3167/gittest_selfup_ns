@@ -7,6 +7,7 @@
 
 #define VSERV_NETWORKPACKET_SIZE_INCREMENT 4096
 
+struct networkpacket_vec_steal_tag_t {};
 struct networkpacket_buf_len_tag_t {};
 struct networkpacket_cmd_tag_t {};
 
@@ -21,6 +22,7 @@ public:
 class NetworkPacket
 {
 public:
+	NetworkPacket(std::vector<uint8_t> vec, networkpacket_vec_steal_tag_t);
 	NetworkPacket(uint8_t *data, size_t data_len, networkpacket_buf_len_tag_t);
 	NetworkPacket(uint8_t cmd, networkpacket_cmd_tag_t);
 

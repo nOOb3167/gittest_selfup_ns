@@ -67,9 +67,11 @@ struct address_less_t {
 
 class TCPSocket
 {
-	typedef ::std::unique_ptr<int, void(*)(int *fd)> unique_ptr_fd;
-
 public:
+	/* https://msdn.microsoft.com/en-us/library/windows/desktop/ms740516(v=vs.85).aspx */
+	typedef ::std::unique_ptr<int, void(*)(int *fd)> unique_ptr_fd;
+	typedef ::std::shared_ptr<int>                   shared_ptr_fd;
+
 	TCPSocket() :
 		m_handle(new int(socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP)), deleteFd)
 	{
@@ -153,15 +155,18 @@ public:
 	static void deleteFd(int *fd)
 	{
 		if (fd) {
-			if (*fd != -1) {
 #ifdef _WIN32
+			if (*fd == INVALID_SOCKET) {
 				closesocket(*fd);
-#else
-				close(*fd);
-#endif
+				*fd = INVALID_SOCKET;
 			}
-
-			*fd = -1;
+#else
+			if (*fd != -1) {
+				close(*fd);
+				*fd = -1;
+			}
+#endif
+			delete fd;
 		}
 	}
 

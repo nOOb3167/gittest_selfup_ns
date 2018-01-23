@@ -17,6 +17,13 @@ SET(SELFUP_NS_SOURCES
 	src/ns_selfup_main.cpp
 )
 
+SET(SERV_NS_HEADERS
+	include/selfup/TCPAsync.h
+)
+SET(SERV_NS_SOURCES
+	src/ns_serv_main.cpp
+)
+
 FIND_PACKAGE(LibGit2 REQUIRED)
 
 ## http://stackoverflow.com/questions/1620918/cmake-and-libpthread/29871891#29871891
@@ -30,3 +37,8 @@ ADD_EXECUTABLE(selfup_ns ${SELFUP_NS_HEADERS} ${SELFUP_NS_SOURCES})
 SET_PROPERTY(TARGET selfup_ns PROPERTY SUFFIX ".exe")
 TARGET_LINK_LIBRARIES(selfup_ns Threads::Threads ${LIBGIT2_LIBRARIES})
 TARGET_INCLUDE_DIRECTORIES(selfup_ns PUBLIC ${CMAKE_SOURCE_DIR}/include ${LIBGIT2_INCLUDE_DIR})
+
+ADD_EXECUTABLE(serv_ns ${SERV_NS_HEADERS} ${SERV_NS_SOURCES})
+SET_PROPERTY(TARGET serv_ns PROPERTY SUFFIX ".exe")
+TARGET_LINK_LIBRARIES(serv_ns Threads::Threads)
+TARGET_INCLUDE_DIRECTORIES(serv_ns PUBLIC ${CMAKE_SOURCE_DIR}/include)

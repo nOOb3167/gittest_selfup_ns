@@ -6,6 +6,13 @@
 
 #include <selfup/NetworkPacket.h>
 
+NetworkPacket::NetworkPacket(std::vector<uint8_t> vec, networkpacket_vec_steal_tag_t) :
+	m_data(std::move(vec)),
+	m_off(0)
+{
+	m_data.reserve(VSERV_NETWORKPACKET_SIZE_INCREMENT);
+}
+
 NetworkPacket::NetworkPacket(uint8_t *data, size_t data_len, networkpacket_buf_len_tag_t) :
 	m_data(data, data + data_len),
 	m_off(0)
@@ -17,6 +24,7 @@ NetworkPacket::NetworkPacket(uint8_t cmd, networkpacket_cmd_tag_t) :
 	m_data(),
 	m_off(0)
 {
+	m_data.reserve(VSERV_NETWORKPACKET_SIZE_INCREMENT);
 	(*this) << cmd;
 }
 
