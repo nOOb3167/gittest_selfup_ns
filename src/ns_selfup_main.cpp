@@ -15,10 +15,8 @@
 
 #include <selfup/NetworkPacket.h>
 #include <selfup/ns_filesys.h>
+#include <selfup/ns_helpers.h>
 #include <selfup/TCPSocket.h>
-
-#define GS_MAX(x, y) (((x) > (y)) ? (x) : (y))
-#define GS_MIN(x, y) (((x) < (y)) ? (x) : (y))
 
 #define SELFUP_ARG_CHILD "--xchild"
 #define SELFUP_ARG_VERSUB "--xversub"
@@ -26,18 +24,6 @@
 
 #define SELFUP_FRAME_SIZE_MAX (256 * 1024 * 1024)
 #define SELFUP_LONG_TIMEOUT_MS (30 * 1000)
-
-#define SELFUP_CMD_REQUEST_LATEST_SELFUPDATE_BLOB  1
-#define SELFUP_CMD_RESPONSE_LATEST_SELFUPDATE_BLOB 2
-#define SELFUP_CMD_REQUEST_BLOB_SELFUPDATE   3
-#define SELFUP_CMD_RESPONSE_BLOB_SELFUPDATE  4
-#define SELFUP_CMD_REQUEST_LATEST_COMMIT_TREE  5
-#define SELFUP_CMD_RESPONSE_LATEST_COMMIT_TREE 6
-#define SELFUP_CMD_REQUEST_TREELIST  7
-#define SELFUP_CMD_RESPONSE_TREELIST 8
-#define SELFUP_CMD_REQUEST_OBJS3        9
-#define SELFUP_CMD_RESPONSE_OBJS3      10
-#define SELFUP_CMD_RESPONSE_OBJS3_DONE 11
 
 typedef ::std::unique_ptr<git_repository, void(*)(git_repository *)> unique_ptr_gitrepository;
 typedef ::std::unique_ptr<git_blob, void(*)(git_blob *)> unique_ptr_gitblob;

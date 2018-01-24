@@ -16,9 +16,7 @@
 #endif
 
 #include <selfup/ns_filesys.h>
-
-#define GS_MAX(x, y) (((x) > (y)) ? (x) : (y))
-#define GS_MIN(x, y) (((x) < (y)) ? (x) : (y))
+#include <selfup/ns_helpers.h>
 
 namespace ns_filesys
 {

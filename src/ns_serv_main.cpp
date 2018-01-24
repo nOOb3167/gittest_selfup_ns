@@ -5,6 +5,7 @@
 
 #include <git2.h>  // FIXME: provides socket includes
 
+#include <selfup/ns_helpers.h>
 #include <selfup/TCPAsync.h>
 
 #define SERVUP_ASYNC_TIMEOUT_MS 10000
