@@ -23,6 +23,12 @@ std::string build_modified_filename(
 	std::string replacement_suffix,
 	std::string replacement_extension);
 
+std::string path_append_abs_rel(
+	std::string absolute,
+	std::string relative);
+
+std::string file_read(
+	std::string filename);
 void file_write_frombuffer(
 	std::string filename,
 	const char *buf, size_t buf_len);

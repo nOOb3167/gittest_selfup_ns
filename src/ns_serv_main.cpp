@@ -3,8 +3,6 @@
 #include <stdexcept>
 #include <thread>
 
-#include <git2.h>  // FIXME: provides socket includes
-
 #include <selfup/ns_helpers.h>
 #include <selfup/TCPAsync.h>
 
@@ -79,8 +77,5 @@ void servup_start_crank(Address addr)
 
 int main(int argc, char **argv)
 {
-	if (git_libgit2_init() < 0)
-		throw std::runtime_error("libgit2 init");
-
 	return EXIT_SUCCESS;
 }

@@ -46,6 +46,64 @@ std::string build_modified_filename(
 	return out;
 }
 
+std::string path_append_abs_rel(
+	std::string absolute,
+	std::string relative)
+{
+	int r = 0;
+
+	size_t LenOutputPathTmp = 0;
+
+	/** maximum length for PathIsRelative and PathAppend **/
+	if (absolute.size() > MAX_PATH || relative.size() > MAX_PATH)
+		throw FilesysExc("path length");
+
+	if (PathIsRelative(absolute.c_str()))
+		throw FilesysExc("path rel");
+
+	if (! PathIsRelative(relative.c_str()))
+		throw FilesysExc("path notrel");
+
+	/* prep output buffer with absolute path */
+
+	std::string out(absolute);
+	out.append('\0');
+	out.resize(GS_MAX(out.size(), MAX_PATH));
+
+	/* append */
+
+	if (! PathAppend((char *) out.data(), relative.c_str()))
+		throw FilesysExc("path append");
+
+	std::string out2(out.c_str());
+
+	return out2;
+}
+
+std::string file_read(
+	std::string filename)
+{
+	std::ifstream ff(filename, std::ios::in | std::ios::binary);
+
+	if (! ff.good())
+		throw FilesysExc("ifstream open");
+
+	std::stringstream ss;
+
+	ss << ff.rdbuf();
+
+	if (! ff.good() || ! ss.good())
+		throw FilesysExc("ifstream/stringstream read");
+
+	ff.close();
+
+	if (! ff.good())
+		throw FilesysExc("ifstream close");
+
+	return ss.str();
+}
+
+
 void file_write_frombuffer(
 	std::string filename,
 	const char *buf, size_t buf_len)
