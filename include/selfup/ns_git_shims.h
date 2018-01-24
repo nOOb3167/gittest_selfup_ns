@@ -14,6 +14,19 @@
 namespace ns_git
 {
 
+typedef enum {
+	NS_GIT_OBJ_BAD = -1,
+	NS_GIT_OBJ_COMMIT = 1,
+	NS_GIT_OBJ_TREE = 2,
+	NS_GIT_OBJ_BLOB = 3,
+} ns_git_otype;
+
+static struct { int n; char *s; } ns_git_objects_table[] = {
+	{ NS_GIT_OBJ_COMMIT, "commit" },
+	{ NS_GIT_OBJ_TREE, "tree" },
+	{ NS_GIT_OBJ_BLOB, "blob" },
+};
+
 struct ns_git_oid
 {
 	unsigned char id[NS_GIT_OID_RAWSZ];
@@ -54,8 +67,11 @@ std::string inflatebuf(const std::string &buf)
 		strm.next_out = (Bytef *) out;
 
 		ret = inflate(&strm, Z_NO_FLUSH);
-		if (ret != Z_OK && ret != Z_STREAM_END)
+		if (ret != Z_OK && ret != Z_STREAM_END) {
+			if (inflateEnd(&strm) != Z_OK)
+				throw std::runtime_error("inflate inflateend");
 			throw std::runtime_error("inflate inflate");
+		}
 
 		size_t have = CHUNK - strm.avail_out;
 		result.append(out, have);
@@ -153,6 +169,14 @@ ns_git_oid oid_from_hexstr(std::string str)
 	return ret;
 }
 
+int object_string2type(std::string s)
+{
+	for (size_t i = 0; i < sizeof ns_git_objects_table / sizeof *ns_git_objects_table; i++)
+		if (s == ns_git_objects_table[i].s)
+			return ns_git_objects_table[i].n;
+	return NS_GIT_OBJ_BAD;
+}
+
 std::string memes_objpath(
 	std::string repopath,
 	ns_git_oid oid)
@@ -168,6 +192,83 @@ std::string memes_objpath(
 	std::string fullpath = ns_filesys::path_append_abs_rel(objectspath, sha1path);
 
 	return fullpath;
+}
+
+void memes_get_object_header(
+	const std::string &data,
+	ns_git_otype *out_type, size_t *out_data_offset, size_t *out_data_size)
+{
+	/* see function get_object_header in odb_loose.c */
+	/* also this comment from git source LUL: (sha1_file.c::parse_sha1_header_extended)
+	*   """We used to just use "sscanf()", but that's actually way
+	*   too permissive for what we want to check. So do an anal
+	*   object header parse by hand."""
+	*/
+
+	ns_git_otype type = NS_GIT_OBJ_BAD;
+	unsigned long long num = 0;
+
+	/* parse type string */
+
+	size_t spc = data.find_first_of(' ', 0);
+
+	if (spc == std::string::npos)
+		throw std::runtime_error("hdr spc");
+
+	/* see also git_object_typeisloose (as used by odb_loose.c) */
+	if ((type == object_string2type(data.substr(0, spc))) == NS_GIT_OBJ_BAD)
+		throw std::runtime_error("hdr type");
+
+	spc++;
+
+	/* parse size string */
+
+	size_t afternum = std::string::npos;
+
+	if ((afternum = data.find_first_not_of("0123456789", spc)) == std::string::npos)
+		throw std::runtime_error("hdr num");
+
+	std::string strnum = data.substr(spc, afternum - spc);
+
+	for (size_t i = 0; i < strnum.size(); i++)
+		num = num * 10 + (strnum[i] - '0');
+
+	/* null header terminator */
+
+	if (data.at(afternum) != '\0')
+		throw std::runtime_error("hdr null");
+
+	size_t afterhdr = afternum + 1;
+
+	/* sanity checks */
+
+	if (num > SIZE_MAX)
+		throw std::runtime_error("hdr num");
+
+	if (afterhdr + num > data.size())
+		throw std::runtime_error("hdr data");
+
+	if (out_type)
+		*out_type = type;
+	if (out_data_offset)
+		*out_data_offset = afterhdr;
+	if (out_data_size)
+		*out_data_size = (size_t)num;
+}
+
+ns_git_oid memes_commit_tree(
+	const std::string &buf)
+{
+	/* see function parse_commit_buffer in git */
+
+	const int tree_entry_len = NS_GIT_OID_HEXSZ + 5;
+
+	if (tree_entry_len + 1 >= buf.size() || !! buf.substr(0, 5).compare("tree ") || buf[tree_entry_len] != '\n')
+		throw std::runtime_error("commit format");
+
+	ns_git_oid oid = oid_from_hexstr(buf.substr(5, NS_GIT_OID_HEXSZ));
+
+	return oid;
 }
 
 ns_git_oid latest_commit_tree_oid(
@@ -190,19 +291,19 @@ ns_git_oid latest_commit_tree_oid(
 
 	std::string content = ns_filesys::file_read(commit_head_path);
 
-	//if (!!(r = git_memes_inflate(CommitContentBuf, LenCommitContent, &CommitInflated, &CommitType, &CommitOffset, &CommitSize)))
-	//	GS_GOTO_CLEAN();
+	std::string inflated = inflatebuf(content);
 
-	//if (CommitType != GIT_OBJ_COMMIT)
-	//	GS_ERR_CLEAN(1);
+	ns_git_otype inflated_type = NS_GIT_OBJ_BAD;
+	size_t inflated_offset = 0;
+	size_t inflated_size = 0;
+	memes_get_object_header(inflated, &inflated_type, &inflated_offset, &inflated_size);
 
-	//if (!!(r = git_memes_commit(CommitInflated.ptr + CommitOffset, CommitSize, &TreeHeadOid)))
-	//	GS_GOTO_CLEAN();
+	if (inflated_type != NS_GIT_OBJ_COMMIT)
+		throw std::runtime_error("inflated type");
 
-	//if (oCommitHeadOid)
-	//	git_oid_cpy(oCommitHeadOid, &CommitHeadOid);
-	//if (oTreeHeadOid)
-	//	git_oid_cpy(oTreeHeadOid, &TreeHeadOid);
+	ns_git_oid tree_head_oid = memes_commit_tree(inflated.substr(inflated_offset, inflated_size));
+
+	return tree_head_oid;
 }
 
 }
