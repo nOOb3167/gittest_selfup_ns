@@ -18,9 +18,12 @@ SET(SELFUP_NS_SOURCES
 )
 
 SET(SERV_NS_HEADERS
+	include/selfup/NetworkPacket.h
 	include/selfup/TCPAsync.h
+	include/selfup/TCPSocket.h
 )
 SET(SERV_NS_SOURCES
+	src/NetworkPacket.cpp
 	src/ns_serv_main.cpp
 )
 
@@ -40,5 +43,5 @@ TARGET_INCLUDE_DIRECTORIES(selfup_ns PUBLIC ${CMAKE_SOURCE_DIR}/include ${LIBGIT
 
 ADD_EXECUTABLE(serv_ns ${SERV_NS_HEADERS} ${SERV_NS_SOURCES})
 SET_PROPERTY(TARGET serv_ns PROPERTY SUFFIX ".exe")
-TARGET_LINK_LIBRARIES(serv_ns Threads::Threads)
-TARGET_INCLUDE_DIRECTORIES(serv_ns PUBLIC ${CMAKE_SOURCE_DIR}/include)
+TARGET_LINK_LIBRARIES(serv_ns Threads::Threads ${LIBGIT2_LIBRARIES})
+TARGET_INCLUDE_DIRECTORIES(serv_ns PUBLIC ${CMAKE_SOURCE_DIR}/include ${LIBGIT2_INCLUDE_DIR})

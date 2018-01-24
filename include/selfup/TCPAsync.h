@@ -5,6 +5,7 @@
 #include <cstdint>
 #include <cstring>
 #include <deque>
+#include <functional>
 #include <map>
 #include <memory>
 #include <stdexcept>
@@ -155,8 +156,11 @@ private:
 class TCPAsync1 : public TCPAsync
 {
 public:
-	TCPAsync1(Address addr) :
-		TCPAsync(addr)
+	typedef ::std::function<void(NetworkPacket *packet, Respond *respond)> function_framedispatch_t;
+
+	TCPAsync1(Address addr, function_framedispatch_t framedispatch) :
+		TCPAsync(addr),
+		m_framedispatch(framedispatch)
 	{}
 
 	void virtualFrameRead(const TCPSocket::shared_ptr_fd &fd, SockData *d) override
@@ -182,6 +186,7 @@ public:
 				if (d->m_off >= 9 + sz) {
 					assert(d->m_off == 9 + sz);
 					NetworkPacket packet(std::move(d->m_buf), networkpacket_vec_steal_tag_t());
+					d->m_buf = std::vector<uint8_t>();
 					d->m_queue_recv.push_back(std::move(NetworkPacket(std::move(d->m_buf), networkpacket_vec_steal_tag_t())));
 					d->m_off = 0;
 				}
@@ -247,8 +252,11 @@ public:
 
 	void virtualFrameDispatch(NetworkPacket *packet, Respond *respond) override
 	{
-		throw std::runtime_error("unimplemented");
+		m_framedispatch(packet, respond);
 	}
+
+private:
+	function_framedispatch_t m_framedispatch;
 };
 
 #endif /* _TCPASYNC_H_ */
