@@ -21,6 +21,12 @@ typedef enum {
 	NS_GIT_OBJ_BLOB = 3,
 } ns_git_otype;
 
+typedef enum {
+	NS_GIT_FILEMODE_TREE            = 0040000,
+	NS_GIT_FILEMODE_BLOB            = 0100644,
+	NS_GIT_FILEMODE_BLOB_EXECUTABLE = 0100755,
+} ns_git_filemode_t;
+
 static struct { int n; char *s; } ns_git_objects_table[] = {
 	{ NS_GIT_OBJ_COMMIT, "commit" },
 	{ NS_GIT_OBJ_TREE, "tree" },
@@ -32,6 +38,39 @@ struct ns_git_oid
 	unsigned char id[NS_GIT_OID_RAWSZ];
 };
 typedef struct ns_git_oid ns_git_oid;
+
+struct nsgitobject_deflated_tag_t {};
+struct nsgitobject_normal_tag_t {};
+
+class NsGitObject
+{
+public:
+	NsGitObject(ns_git_oid oid, ns_git_otype type, std::string inflated, size_t inflated_offset, size_t inflated_size, std::string deflated, nsgitobject_deflated_tag_t) :
+		m_oid(oid),
+		m_type(type),
+		m_inflated(std::move(inflated)),
+		m_inflated_offset(std::move(inflated_offset)),
+		m_inflated_size(inflated_size),
+		m_deflated(std::move(deflated))
+	{}
+
+	NsGitObject(ns_git_oid oid, ns_git_otype type, std::string inflated, size_t inflated_offset, size_t inflated_size, nsgitobject_normal_tag_t) :
+		m_oid(oid),
+		m_type(type),
+		m_inflated(std::move(inflated)),
+		m_inflated_offset(std::move(inflated_offset)),
+		m_inflated_size(inflated_size),
+		m_deflated(std::string())
+	{}
+
+private:
+	ns_git_oid m_oid;
+	ns_git_otype m_type;
+	std::string m_inflated;
+	size_t m_inflated_offset;
+	size_t m_inflated_size;
+	std::string m_deflated;
+};
 
 std::string inflatebuf(const std::string &buf)
 {
@@ -159,14 +198,20 @@ std::string encode_hex(const std::string &bin, bool web_programmer_designed_swap
 	}
 }
 
-ns_git_oid oid_from_hexstr(std::string str)
+ns_git_oid oid_from_raw(const std::string &raw)
+{
+	ns_git_oid ret;
+	if (raw.size() != NS_GIT_OID_RAWSZ)
+		throw std::runtime_error("oid raw size");
+	memcpy(ret.id, raw.data(), raw.size());
+	return ret;
+}
+
+ns_git_oid oid_from_hexstr(const std::string &str)
 {
 	ns_git_oid ret;
 	std::string raw = decode_hex(str, true);
-	if (raw.size() != NS_GIT_OID_HEXSZ)
-		throw std::runtime_error("oid str size");
-	memcpy(ret.id, raw.data(), raw.size());
-	return ret;
+	return oid_from_raw(raw);
 }
 
 int object_string2type(std::string s)
@@ -178,7 +223,7 @@ int object_string2type(std::string s)
 }
 
 std::string memes_objpath(
-	std::string repopath,
+	const std::string &repopath,
 	ns_git_oid oid)
 {
 	/* see function object_file_name in odb_loose.c (libgit2) */
@@ -192,6 +237,73 @@ std::string memes_objpath(
 	std::string fullpath = ns_filesys::path_append_abs_rel(objectspath, sha1path);
 
 	return fullpath;
+}
+
+int memes_parse_mode(const std::string &buf)
+{
+	/* see function parse_mode in tree.c */
+	unsigned long long mode = 0;
+	for (size_t i = 0; i < buf.size(); i++) {
+		if (buf[i] < '0' || buf[i] > '7')
+			throw std::runtime_error("mode format");
+		mode = (mode << 3) + (buf[i] - '0');
+	}
+	return mode;
+}
+
+void memes_tree(
+	const std::string &data,
+	size_t *inout_data_offset,
+	unsigned long long *out_mode,
+	std::string *out_filename,
+	ns_git_oid *out_sha1)
+{
+	/* handle end condition */
+
+	if (*inout_data_offset >= data.size()) {
+		*inout_data_offset = -1;
+		return;
+	}
+
+	/* parse mode string (octal digits followed by space) */
+
+	size_t spc = data.find_first_of(' ', *inout_data_offset);
+
+	if (spc == std::string::npos)
+		throw std::runtime_error("tree spc");
+
+	unsigned long long mode = memes_parse_mode(data.substr(*inout_data_offset, *inout_data_offset - spc));
+
+	if (mode != NS_GIT_FILEMODE_TREE &&
+		mode != NS_GIT_FILEMODE_BLOB &&
+		mode != NS_GIT_FILEMODE_BLOB_EXECUTABLE)
+	{
+		throw std::runtime_error("tree mode");
+	}
+
+	size_t aftermode = spc + 1;
+
+	/* parse filename (bytearray followed by '\0') */
+
+	size_t nul = data.find_first_of('\0', aftermode);
+
+	if (nul == std::string::npos)
+		throw std::runtime_error("tree nul");
+
+	std::string filename = data.substr(aftermode, nul - aftermode);
+
+	size_t afterfilename = nul + 1;
+
+	/* parse SHA1 */
+
+	ns_git_oid sha1 = oid_from_raw(data.substr(afterfilename, NS_GIT_OID_RAWSZ));
+
+	size_t aftersha1 = afterfilename + NS_GIT_OID_RAWSZ;
+
+	*inout_data_offset = aftersha1;
+	*out_mode = mode;
+	*out_filename = std::move(filename);
+	*out_sha1 = sha1;
 }
 
 void memes_get_object_header(
@@ -272,8 +384,8 @@ ns_git_oid memes_commit_tree(
 }
 
 ns_git_oid latest_commit_tree_oid(
-	std::string repopath,
-	std::string refname)
+	const std::string &repopath,
+	const std::string &refname)
 {
 	/* https://github.com/git/git/blob/f06d47e7e0d9db709ee204ed13a8a7486149f494/refs.c#L36-100 */
 	/* also libgit2 refs.c git_reference__normalize_name */
@@ -304,6 +416,32 @@ ns_git_oid latest_commit_tree_oid(
 	ns_git_oid tree_head_oid = memes_commit_tree(inflated.substr(inflated_offset, inflated_size));
 
 	return tree_head_oid;
+}
+
+NsGitObject read_object(
+	const std::string &repopath,
+	ns_git_oid oid,
+	bool also_fill_out_deflated)
+{
+	std::string objpath = memes_objpath(repopath, oid);
+
+	std::string deflated = ns_filesys::file_read(objpath);
+
+	std::string inflated = inflatebuf(deflated);
+
+	ns_git_otype inflated_type = NS_GIT_OBJ_BAD;
+	size_t inflated_offset = 0;
+	size_t inflated_size = 0;
+	memes_get_object_header(inflated, &inflated_type, &inflated_offset, &inflated_size);
+
+	if (also_fill_out_deflated) {
+		NsGitObject nsgitobj(oid, inflated_type, std::move(inflated), inflated_offset, inflated_size, std::move(deflated), nsgitobject_deflated_tag_t());
+		return nsgitobj;
+	}
+	else {
+		NsGitObject nsgitobj(oid, inflated_type, std::move(inflated), inflated_offset, inflated_size, nsgitobject_normal_tag_t());
+		return nsgitobj;
+	}
 }
 
 }
