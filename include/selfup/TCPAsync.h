@@ -2,23 +2,83 @@
 #define _TCPASYNC_H_
 
 #include <cassert>
+#include <condition_variable>
 #include <cstdint>
 #include <cstring>
 #include <deque>
 #include <functional>
 #include <map>
 #include <memory>
+#include <mutex>
 #include <stdexcept>
+#include <thread>
 #include <utility>
+#include <vector>
 
 #include <selfup/TCPSocket.h>
 #include <selfup/NetworkPacket.h>
 
 #define TCPASYNC_FRAME_SIZE_MAX (256 * 1024 * 1024)
 
+#define TCPASYNC_WRITE_THREAD_NUM 8
+
 class TCPAsync
 {
 public:
+	class SockData;
+	typedef ::std::map<TCPSocket::shared_ptr_fd, std::shared_ptr<SockData> > socks_t;
+
+	struct socksend_packet_tag_t {};
+	struct socksend_packet_file_tag_t {};
+
+	class SockSend
+	{	
+	public:
+		SockSend(NetworkPacket packet, socksend_packet_tag_t) :
+			m_packet(std::move(packet)),
+			m_offset(0),
+			m_fd(NULL, TCPSocket::deleteFdFileNotSocket),
+			m_fd_size(-1),
+			m_fd_offset(0)
+		{}
+
+		SockSend(NetworkPacket packet, const std::string &filename, socksend_packet_file_tag_t) :
+			m_packet(std::move(packet)),
+			m_offset(0),
+			m_fd(new int(_open(filename.c_str(), _O_RDONLY | _O_BINARY)), TCPSocket::deleteFdFileNotSocket),
+			m_fd_size(-1),
+			m_fd_offset(0)
+		{
+#ifndef _WIN32
+#error
+#endif
+			if (*m_fd < 0)
+				throw new std::runtime_error("file open");
+			struct _stat buf = {};
+			if (_fstat(*m_fd, &buf) == -1)
+				throw new std::runtime_error("file stat");
+			assert((buf.st_mode & _S_IFREG) == _S_IFREG);
+			m_fd_size = buf.st_size;
+		}
+
+		SockSend(const SockSend &a)            = delete;
+		SockSend& operator=(const SockSend &a) = delete;
+		SockSend(SockSend &&a)            = default;
+		SockSend& operator=(SockSend &&a) = default;
+
+		bool hasFile()
+		{
+			return (m_fd && *m_fd >= 0);
+		}
+
+	public:
+		NetworkPacket m_packet;
+		size_t        m_offset;
+		TCPSocket::unique_ptr_fd m_fd;
+		size_t        m_fd_size;
+		size_t        m_fd_offset;
+	};
+
 	class SockData
 	{
 	public:
@@ -30,27 +90,28 @@ public:
 			m_queue_send()
 		{}
 
+	public:
 		size_t      m_off;
 		uint8_t     m_hdr[9];
 		std::vector<uint8_t> m_buf;
 		std::deque<NetworkPacket> m_queue_recv;
-		std::deque<std::pair<NetworkPacket, size_t> > m_queue_send;  /* 0 .. 9+sz */
+		std::deque<SockSend> m_queue_send;  /* 0 .. 9+sz */
 	};
 
 	class Respond
 	{
 	public:
-		Respond(SockData *sd) :
-			m_sd(sd)
+		Respond(const std::shared_ptr<SockData> &d) :
+			m_d(d)
 		{}
 
 		void respondOneshot(NetworkPacket packet)
 		{
-			m_sd->m_queue_send.push_back(std::make_pair(std::move(packet), 0));
+			m_d->m_queue_send.push_back(SockSend(std::move(packet), socksend_packet_tag_t()));
 		}
 
 	private:
-		SockData *m_sd;
+		std::shared_ptr<SockData> m_d;
 	};
 
 	TCPAsync(Address addr) :
@@ -88,7 +149,7 @@ public:
 
 			for (auto it = m_socks.begin(); it != m_socks.end(); ++it) {
 				fdmax = *it->first > fdmax ? *it->first : fdmax;
-				if (it->second.m_queue_send.empty())
+				if (it->second->m_queue_send.empty())
 					FD_SET(*it->first, &read_set);
 				else
 					FD_SET(*it->first, &write_set);
@@ -115,31 +176,35 @@ public:
 				unsigned long nonblock = 1;
 				if (ioctlsocket(*m_listen, FIONBIO, &nonblock) < 0)
 					throw std::runtime_error("TCPAsync ioctlsocket");
-				if (! m_socks.insert(std::make_pair(std::move(nsock), SockData())).second)
+				if (! m_socks.insert(std::make_pair(std::move(nsock), std::shared_ptr<SockData>(new SockData()))).second)
 					throw std::runtime_error("TCPAsync insert");
 			}
 
 			for (auto it = m_socks.begin(); it != m_socks.end(); ++it) {
 				if (FD_ISSET(*it->first, &read_set)) {
-					virtualFrameRead(it->first, &it->second);
-					while (! it->second.m_queue_recv.empty()) {
-						NetworkPacket packet = std::move(it->second.m_queue_recv.front());
-						it->second.m_queue_recv.pop_front();
-						Respond respond(&it->second);
+					virtualFrameRead(it->first, it->second);
+					while (! it->second->m_queue_recv.empty()) {
+						NetworkPacket packet = std::move(it->second->m_queue_recv.front());
+						it->second->m_queue_recv.pop_front();
+						Respond respond(it->second);
 						virtualFrameDispatch(&packet, &respond);
 					}
 				}
 			}
 
-			for (auto it = m_socks.begin(); it != m_socks.end(); ++it) {
+			for (auto it = m_socks.begin(); it != m_socks.end(); /*dummy*/) {
 				if (FD_ISSET(*it->first, &write_set))
-					virtualFrameWrite(it->first, &it->second);
+					if (virtualFrameWrite(it->first, it->second))
+						it = m_socks.erase(it);
+					else
+						++it;
 			}
 		}
 	}
 
-	virtual void virtualFrameRead(const TCPSocket::shared_ptr_fd &fd, SockData *d) = 0;
-	virtual void virtualFrameWrite(const TCPSocket::shared_ptr_fd &fd, SockData *d) = 0;
+	virtual void virtualFrameRead(const TCPSocket::shared_ptr_fd &fd, const std::shared_ptr<SockData> &d) = 0;
+	/* callee stealing the entry returns true */
+	virtual bool virtualFrameWrite(const TCPSocket::shared_ptr_fd &fd, const std::shared_ptr<SockData> &d) = 0;
 	virtual void virtualFrameDispatch(NetworkPacket *packet, Respond *respond) = 0;
 
 protected:
@@ -150,7 +215,7 @@ protected:
 
 private:
 	TCPSocket::unique_ptr_fd m_listen;
-	std::map<TCPSocket::shared_ptr_fd, SockData> m_socks;
+	socks_t m_socks;
 };
 
 class TCPAsync1 : public TCPAsync
@@ -158,12 +223,39 @@ class TCPAsync1 : public TCPAsync
 public:
 	typedef ::std::function<void(NetworkPacket *packet, Respond *respond)> function_framedispatch_t;
 
+	struct writequeueentry_exit_tag_t {};
+
+	class WriteQueueEntry
+	{
+	public:
+		WriteQueueEntry(writequeueentry_exit_tag_t) :
+			m_is_exit(true),
+			m_fd(),
+			m_d()
+		{}
+
+		WriteQueueEntry(const TCPSocket::shared_ptr_fd &fd, const std::shared_ptr<SockData> &d) :
+			m_is_exit(false),
+			m_fd(fd),
+			m_d(d)
+		{}
+
+	public:
+		bool m_is_exit;
+		TCPSocket::shared_ptr_fd m_fd;
+		std::shared_ptr<SockData> m_d;
+	};
+
 	TCPAsync1(Address addr, function_framedispatch_t framedispatch) :
 		TCPAsync(addr),
-		m_framedispatch(framedispatch)
-	{}
+		m_framedispatch(framedispatch),
+		m_write_thread()
+	{
+		for (size_t i = 0; i < TCPASYNC_WRITE_THREAD_NUM; i++)
+			m_write_thread.push_back(std::move(std::thread(&TCPAsync1::threadFuncWrite, this)));
+	}
 
-	void virtualFrameRead(const TCPSocket::shared_ptr_fd &fd, SockData *d) override
+	void virtualFrameRead(const TCPSocket::shared_ptr_fd &fd, const std::shared_ptr<SockData> &d) override
 	{
 		bool readmore = true;
 
@@ -212,42 +304,69 @@ public:
 		}
 	}
 
-	void virtualFrameWrite(const TCPSocket::shared_ptr_fd &fd, SockData *d) override
+	bool virtualFrameWrite(const TCPSocket::shared_ptr_fd &fd, const std::shared_ptr<SockData> &d) override
 	{
 		bool writemore = true;
 
 		while (writemore && !d->m_queue_send.empty()) {
-			std::pair<NetworkPacket, size_t> &snd = d->m_queue_send.front();
-			assert(snd.second <= (9 + snd.first.getDataSize()));
+			/* queue will be pop_front-ed as needed deeper inside the call-graph.
+			   maybe even after processing is queued onto a different thread. */
+			SockSend &snd = d->m_queue_send.front();
 
-			size_t sz = snd.first.getDataSize();
-			uint8_t hdr[9] = { 'F', 'R', 'A', 'M', 'E', 0, 0, 0, 0 };
-			hdr[5] = ((sz >> 24) & 0xFF); hdr[6] = ((sz >> 16) & 0xFF); hdr[7] = ((sz >> 8) & 0xFF); hdr[8] = ((sz >> 0) & 0xFF);
-
-			size_t send_for = 0;
-
-			if (snd.second < 9)
-				send_for = 9 - snd.second;
-			if (snd.second >= 9)
-				send_for = (9 + snd.first.getDataSize()) - snd.second;
-
-			const uint8_t *send_ptr = snd.second < 9 ? hdr + snd.second : snd.first.getDataPtr() + (snd.second - 9);
-
-			int sent = send(*fd, (char *)send_ptr, send_for, 0);
-
-			if (sent < 0 && getSockError() == WSAEWOULDBLOCK)
-				writemore = false;
-			else if (sent < 0)
-				throw std::runtime_error("TCPSocket send sent");
+			if (snd.hasFile()) {
+				frameWriteFile(fd, d, snd);
+				return true;
+			}
 			else {
-				assert(sent != 0);
-
-				snd.second += sent;
-
-				if (snd.second == (9 + snd.first.getDataSize()))
-					d->m_queue_send.pop_front();
+				writemore = frameWriteNormal(fd, d, snd);
+				continue;
 			}
 		}
+		return false;
+	}
+
+	void frameWriteFile(const TCPSocket::shared_ptr_fd &fd, const std::shared_ptr<SockData> &d, SockSend &snd)
+	{
+		{
+			std::unique_lock<std::mutex> lock(m_write_mutex);
+			m_write_queue.push_back(WriteQueueEntry(fd, d));
+		}
+		m_write_cv.notify_one();
+	}
+
+	/* @ret: writemore */
+	bool frameWriteNormal(const TCPSocket::shared_ptr_fd &fd, const std::shared_ptr<SockData> &d, SockSend &snd)
+	{
+		assert(snd.m_offset <= (9 + snd.m_packet.getDataSize()));
+
+		size_t sz = snd.m_packet.getDataSize();
+		uint8_t hdr[9] = { 'F', 'R', 'A', 'M', 'E', 0, 0, 0, 0 };
+		hdr[5] = ((sz >> 24) & 0xFF); hdr[6] = ((sz >> 16) & 0xFF); hdr[7] = ((sz >> 8) & 0xFF); hdr[8] = ((sz >> 0) & 0xFF);
+
+		size_t send_for = 0;
+
+		if (snd.m_offset < 9)
+			send_for = 9 - snd.m_offset;
+		if (snd.m_offset >= 9)
+			send_for = (9 + snd.m_packet.getDataSize()) - snd.m_offset;
+
+		const uint8_t *send_ptr = snd.m_offset < 9 ? hdr + snd.m_offset : snd.m_packet.getDataPtr() + (snd.m_offset - 9);
+
+		int sent = send(*fd, (char *)send_ptr, send_for, 0);
+
+		if (sent < 0 && getSockError() == WSAEWOULDBLOCK)
+			return false;
+		else if (sent < 0)
+			throw std::runtime_error("TCPSocket send sent");
+		else {
+			assert(sent != 0);
+
+			snd.m_offset += sent;
+
+			if (snd.m_offset == (9 + snd.m_packet.getDataSize()))
+				d->m_queue_send.pop_front();
+		}
+		return true;
 	}
 
 	void virtualFrameDispatch(NetworkPacket *packet, Respond *respond) override
@@ -255,8 +374,28 @@ public:
 		m_framedispatch(packet, respond);
 	}
 
+	void threadFuncWrite()
+	{
+		std::unique_lock<std::mutex> lock(m_write_mutex);
+		while (true) {
+			m_write_cv.wait(lock, [&]() { return ! m_write_queue.empty(); });
+			WriteQueueEntry wqe = m_write_queue.front();
+			m_write_queue.pop_front();
+			if (wqe.m_is_exit)
+				return;
+			assert(! wqe.m_d->m_queue_send.empty());
+			SockSend &snd = wqe.m_d->m_queue_send.front();
+			assert(snd.hasFile());
+			wqe.m_d->m_queue_send.pop_front();
+		}
+	}
+
 private:
 	function_framedispatch_t m_framedispatch;
+	std::mutex m_write_mutex;
+	std::condition_variable m_write_cv;
+	std::vector<std::thread> m_write_thread;
+	std::deque<WriteQueueEntry> m_write_queue;
 };
 
 #endif /* _TCPASYNC_H_ */

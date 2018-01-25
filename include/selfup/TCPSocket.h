@@ -8,6 +8,10 @@
 
 #ifdef _WIN32
 #include <winsock2.h>
+#include <io.h>
+#include <fcntl.h>
+#include <sys\types.h>
+#include <sys\stat.h>
 #else
 #include <arpa/inet.h>
 #include <netinet/in.h>
@@ -156,7 +160,7 @@ public:
 	{
 		if (fd) {
 #ifdef _WIN32
-			if (*fd == INVALID_SOCKET) {
+			if (*fd != INVALID_SOCKET) {
 				closesocket(*fd);
 				*fd = INVALID_SOCKET;
 			}
@@ -167,6 +171,23 @@ public:
 			}
 #endif
 			delete fd;
+		}
+	}
+
+	static void deleteFdFileNotSocket(int *fd)
+	{
+		if (fd) {
+#ifdef _WIN32
+			if (*fd != -1) {
+				_close(*fd);
+				*fd = -1;
+			}
+#else
+			if (*fd != -1) {
+				close(*fd);
+				*fd = -1;
+			}
+#endif
 		}
 	}
 
