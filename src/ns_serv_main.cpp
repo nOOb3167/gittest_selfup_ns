@@ -139,6 +139,27 @@ public:
 		}
 		break;
 
+		case SELFUP_CMD_REQUEST_OBJS3:
+		{
+			uint32_t oidnum = 0;
+
+			(*packet) >> oidnum;
+
+			for (size_t i = 0; i < oidnum; i++) {
+				ns_git_oid requested_oid = {};
+				memcpy(requested_oid.id, packet->inSizedStr(NS_GIT_OID_RAWSZ), NS_GIT_OID_RAWSZ);
+				NsGitObject requested_obj = read_object(m_ext->m_repopath, requested_oid, true);
+				NetworkPacket res_objs3(SELFUP_CMD_RESPONSE_OBJS3, networkpacket_cmd_tag_t());
+				res_objs3 << (uint32_t) requested_obj.m_deflated.size();
+				res_objs3.outSizedStr(requested_obj.m_deflated.data(), requested_obj.m_deflated.size());
+				respond->respondOneshot(std::move(res_objs3));
+			}
+
+			NetworkPacket res_objs3_done(SELFUP_CMD_RESPONSE_OBJS3_DONE, networkpacket_cmd_tag_t());
+			respond->respondOneshot(std::move(res_objs3_done));
+		}
+		break;
+
 		default:
 			throw std::runtime_error("id");
 		}
