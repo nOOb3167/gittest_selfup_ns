@@ -1,3 +1,4 @@
+#include <cstring>
 #include <exception>
 #include <memory>
 #include <stdexcept>
@@ -71,7 +72,7 @@ public:
 	{
 		// FIXME: make cache head per-refname
 
-		if (m_cache_head && oid_comparator_t()(m_cache_head->m_commit_tree_oid, wanted_oid))
+		if (m_cache_head && oid_equals(m_cache_head->m_commit_tree_oid, wanted_oid))
 			return;
 
 		treemap_t trees(treelist_recursive(m_repopath, wanted_oid));
@@ -116,6 +117,25 @@ public:
 			NetworkPacket res_latest_pkt(SELFUP_CMD_RESPONSE_LATEST_COMMIT_TREE, networkpacket_cmd_tag_t());
 			res_latest_pkt.outSizedStr((char *) latest_oid.id, NS_GIT_OID_RAWSZ);
 			respond->respondOneshot(std::move(res_latest_pkt));
+		}
+		break;
+
+		case SELFUP_CMD_REQUEST_TREELIST:
+		{
+			ns_git_oid requested_oid = {};
+			memcpy(requested_oid.id, packet->inSizedStr(NS_GIT_OID_RAWSZ), NS_GIT_OID_RAWSZ);
+
+			/* serve from cache if applicable */
+
+			const treemap_t &trees = oid_equals(m_ext->m_cache_head->m_commit_tree_oid, requested_oid)
+				? m_ext->m_cache_head->m_trees
+				: treelist_recursive(m_ext->m_repopath, requested_oid);
+
+			NetworkPacket res_treelist_pkt(SELFUP_CMD_RESPONSE_TREELIST, networkpacket_cmd_tag_t());
+			res_treelist_pkt << (uint32_t) trees.size();
+			for (auto it = trees.begin(); it != trees.end(); ++it)
+				res_treelist_pkt.outSizedStr((char *) it->second.m_oid.id, NS_GIT_OID_RAWSZ);
+			respond->respondOneshot(std::move(res_treelist_pkt));
 		}
 		break;
 

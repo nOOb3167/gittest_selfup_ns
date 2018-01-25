@@ -215,6 +215,11 @@ std::string encode_hex(const std::string &bin, bool web_programmer_designed_swap
 	return hex;
 }
 
+bool oid_equals(const ns_git_oid &a, const ns_git_oid &b)
+{
+	return ! oid_comparator_t()(a, b) && ! oid_comparator_t()(b, a);
+}
+
 ns_git_oid oid_from_raw(const std::string &raw)
 {
 	ns_git_oid ret;
