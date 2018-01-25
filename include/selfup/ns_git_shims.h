@@ -81,7 +81,7 @@ struct oid_comparator_t {
 		for (size_t i = 0; i < NS_GIT_OID_RAWSZ; i++)
 			if (a.id[i] != b.id[i])
 				return a.id[i] - b.id[i] < 0;
-		return 0;
+		return false;
 	}
 };
 
