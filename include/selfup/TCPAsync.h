@@ -28,13 +28,13 @@ public:
 	class SockData;
 	typedef ::std::map<TCPSocket::shared_ptr_fd, std::shared_ptr<SockData> > socks_t;
 
-	struct socksend_packet_tag_t {};
-	struct socksend_packet_file_tag_t {};
+	struct sendqueueentry_packet_tag_t {};
+	struct SendQueueEntry_packet_file_tag_t {};
 
-	class SockSend
+	class SendQueueEntry
 	{	
 	public:
-		SockSend(NetworkPacket packet, socksend_packet_tag_t) :
+		SendQueueEntry(NetworkPacket packet, sendqueueentry_packet_tag_t) :
 			m_packet(std::move(packet)),
 			m_offset(0),
 			m_fd(NULL, TCPSocket::deleteFdFileNotSocket),
@@ -42,7 +42,7 @@ public:
 			m_fd_offset(0)
 		{}
 
-		SockSend(NetworkPacket packet, const std::string &filename, socksend_packet_file_tag_t) :
+		SendQueueEntry(NetworkPacket packet, const std::string &filename, SendQueueEntry_packet_file_tag_t) :
 			m_packet(std::move(packet)),
 			m_offset(0),
 			m_fd(new int(_open(filename.c_str(), _O_RDONLY | _O_BINARY)), TCPSocket::deleteFdFileNotSocket),
@@ -61,10 +61,10 @@ public:
 			m_fd_size = buf.st_size;
 		}
 
-		SockSend(const SockSend &a)            = delete;
-		SockSend& operator=(const SockSend &a) = delete;
-		SockSend(SockSend &&a)            = default;
-		SockSend& operator=(SockSend &&a) = default;
+		SendQueueEntry(const SendQueueEntry &a)            = delete;
+		SendQueueEntry& operator=(const SendQueueEntry &a) = delete;
+		SendQueueEntry(SendQueueEntry &&a)            = default;
+		SendQueueEntry& operator=(SendQueueEntry &&a) = default;
 
 		bool hasFile()
 		{
@@ -95,7 +95,7 @@ public:
 		uint8_t     m_hdr[9];
 		std::vector<uint8_t> m_buf;
 		std::deque<NetworkPacket> m_queue_recv;
-		std::deque<SockSend> m_queue_send;  /* 0 .. 9+sz */
+		std::deque<SendQueueEntry> m_queue_send;  /* 0 .. 9+sz */
 	};
 
 	class Respond
@@ -107,7 +107,7 @@ public:
 
 		void respondOneshot(NetworkPacket packet)
 		{
-			m_d->m_queue_send.push_back(SockSend(std::move(packet), socksend_packet_tag_t()));
+			m_d->m_queue_send.push_back(SendQueueEntry(std::move(packet), sendqueueentry_packet_tag_t()));
 		}
 
 	private:
@@ -311,7 +311,7 @@ public:
 		while (writemore && !d->m_queue_send.empty()) {
 			/* queue will be pop_front-ed as needed deeper inside the call-graph.
 			   maybe even after processing is queued onto a different thread. */
-			SockSend &snd = d->m_queue_send.front();
+			SendQueueEntry &snd = d->m_queue_send.front();
 
 			if (snd.hasFile()) {
 				frameWriteFile(fd, d, snd);
@@ -325,7 +325,7 @@ public:
 		return false;
 	}
 
-	void frameWriteFile(const TCPSocket::shared_ptr_fd &fd, const std::shared_ptr<SockData> &d, SockSend &snd)
+	void frameWriteFile(const TCPSocket::shared_ptr_fd &fd, const std::shared_ptr<SockData> &d, SendQueueEntry &snd)
 	{
 		{
 			std::unique_lock<std::mutex> lock(m_write_mutex);
@@ -335,7 +335,7 @@ public:
 	}
 
 	/* @ret: writemore */
-	bool frameWriteNormal(const TCPSocket::shared_ptr_fd &fd, const std::shared_ptr<SockData> &d, SockSend &snd)
+	bool frameWriteNormal(const TCPSocket::shared_ptr_fd &fd, const std::shared_ptr<SockData> &d, SendQueueEntry &snd)
 	{
 		assert(snd.m_offset <= (9 + snd.m_packet.getDataSize()));
 
@@ -384,8 +384,10 @@ public:
 			if (wqe.m_is_exit)
 				return;
 			assert(! wqe.m_d->m_queue_send.empty());
-			SockSend &snd = wqe.m_d->m_queue_send.front();
+			SendQueueEntry &snd = wqe.m_d->m_queue_send.front();
 			assert(snd.hasFile());
+			// FIXME: here you would use the write->TCP_CORK/MSG_MORE->sendfile combo
+			// FIXME: implement
 			wqe.m_d->m_queue_send.pop_front();
 		}
 	}
