@@ -20,6 +20,7 @@ SET(SELFUP_NS_SOURCES
 
 SET(SERV_NS_HEADERS
 	include/selfup/ns_git_shims.h
+	include/selfup/ns_filesys.h
 	include/selfup/ns_helpers.h
 	include/selfup/NetworkPacket.h
 	include/selfup/TCPAsync.h
@@ -27,6 +28,7 @@ SET(SERV_NS_HEADERS
 )
 SET(SERV_NS_SOURCES
 	src/NetworkPacket.cpp
+	src/ns_filesys.cpp
 	src/ns_serv_main.cpp
 )
 

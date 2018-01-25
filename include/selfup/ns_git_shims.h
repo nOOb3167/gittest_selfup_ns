@@ -2,7 +2,11 @@
 #define _NS_GIT_SHIMS_H_
 
 #include <cassert>
+#include <cstring>
+#include <map>
+#include <set>
 #include <string>
+#include <utility>
 
 #include <zlib.h>
 
@@ -27,7 +31,7 @@ typedef enum {
 	NS_GIT_FILEMODE_BLOB_EXECUTABLE = 0100755,
 } ns_git_filemode_t;
 
-static struct { int n; char *s; } ns_git_objects_table[] = {
+static struct { ns_git_otype n; char *s; } ns_git_objects_table[] = {
 	{ NS_GIT_OBJ_COMMIT, "commit" },
 	{ NS_GIT_OBJ_TREE, "tree" },
 	{ NS_GIT_OBJ_BLOB, "blob" },
@@ -63,7 +67,7 @@ public:
 		m_deflated(std::string())
 	{}
 
-private:
+public:
 	ns_git_oid m_oid;
 	ns_git_otype m_type;
 	std::string m_inflated;
@@ -71,6 +75,18 @@ private:
 	size_t m_inflated_size;
 	std::string m_deflated;
 };
+
+struct oid_comparator_t {
+	bool operator()(const ns_git_oid &a, const ns_git_oid &b) const {
+		for (size_t i = 0; i < NS_GIT_OID_RAWSZ; i++)
+			if (a.id[i] != b.id[i])
+				return a.id[i] - b.id[i] < 0;
+		return 0;
+	}
+};
+
+typedef ::std::map<ns_git_oid, NsGitObject, oid_comparator_t> treemap_t;
+typedef ::std::set<ns_git_oid, oid_comparator_t> treeset_t;
 
 std::string inflatebuf(const std::string &buf)
 {
@@ -169,8 +185,8 @@ std::string decode_hex(const std::string &hex, bool web_programmer_designed_swap
 	/* decode */
 
 	for (size_t i = 0; i < hex.size(); i += 2) {
-		size_t first = decode_hex_char(hex[i]) & 0xF;
-		size_t second = decode_hex_char(hex[i + 1]) & 0xF;
+		char first = decode_hex_char(hex[i]) & 0xF;
+		char second = decode_hex_char(hex[i + 1]) & 0xF;
 		if (web_programmer_designed_swapped_hex_mental_illness)
 			bin[i / 2] = first << 4 | second << 0;
 		else
@@ -196,6 +212,7 @@ std::string encode_hex(const std::string &bin, bool web_programmer_designed_swap
 			hex.append(1, second);
 		}
 	}
+	return hex;
 }
 
 ns_git_oid oid_from_raw(const std::string &raw)
@@ -209,12 +226,10 @@ ns_git_oid oid_from_raw(const std::string &raw)
 
 ns_git_oid oid_from_hexstr(const std::string &str)
 {
-	ns_git_oid ret;
-	std::string raw = decode_hex(str, true);
-	return oid_from_raw(raw);
+	return oid_from_raw(decode_hex(str, true));
 }
 
-int object_string2type(std::string s)
+ns_git_otype object_string2type(std::string s)
 {
 	for (size_t i = 0; i < sizeof ns_git_objects_table / sizeof *ns_git_objects_table; i++)
 		if (s == ns_git_objects_table[i].s)
@@ -239,7 +254,7 @@ std::string memes_objpath(
 	return fullpath;
 }
 
-int memes_parse_mode(const std::string &buf)
+unsigned long long memes_parse_mode(const std::string &buf)
 {
 	/* see function parse_mode in tree.c */
 	unsigned long long mode = 0;
@@ -252,27 +267,30 @@ int memes_parse_mode(const std::string &buf)
 }
 
 void memes_tree(
-	const std::string &data,
-	size_t *inout_data_offset,
+	const std::string &inflated,
+	size_t inflated_offset,
+	size_t *inout_parse_offset,
 	unsigned long long *out_mode,
 	std::string *out_filename,
 	ns_git_oid *out_sha1)
 {
+	size_t offset = inflated_offset + *inout_parse_offset;
+
 	/* handle end condition */
 
-	if (*inout_data_offset >= data.size()) {
-		*inout_data_offset = -1;
+	if (offset >= inflated.size()) {
+		*inout_parse_offset = -1;
 		return;
 	}
 
 	/* parse mode string (octal digits followed by space) */
 
-	size_t spc = data.find_first_of(' ', *inout_data_offset);
+	size_t spc = inflated.find_first_of(' ', offset);
 
 	if (spc == std::string::npos)
 		throw std::runtime_error("tree spc");
 
-	unsigned long long mode = memes_parse_mode(data.substr(*inout_data_offset, *inout_data_offset - spc));
+	unsigned long long mode = memes_parse_mode(inflated.substr(offset, offset - spc));
 
 	if (mode != NS_GIT_FILEMODE_TREE &&
 		mode != NS_GIT_FILEMODE_BLOB &&
@@ -285,22 +303,22 @@ void memes_tree(
 
 	/* parse filename (bytearray followed by '\0') */
 
-	size_t nul = data.find_first_of('\0', aftermode);
+	size_t nul = inflated.find_first_of('\0', aftermode);
 
 	if (nul == std::string::npos)
 		throw std::runtime_error("tree nul");
 
-	std::string filename = data.substr(aftermode, nul - aftermode);
+	std::string filename = inflated.substr(aftermode, nul - aftermode);
 
 	size_t afterfilename = nul + 1;
 
 	/* parse SHA1 */
 
-	ns_git_oid sha1 = oid_from_raw(data.substr(afterfilename, NS_GIT_OID_RAWSZ));
+	ns_git_oid sha1 = oid_from_raw(inflated.substr(afterfilename, NS_GIT_OID_RAWSZ));
 
 	size_t aftersha1 = afterfilename + NS_GIT_OID_RAWSZ;
 
-	*inout_data_offset = aftersha1;
+	*inout_parse_offset = aftersha1;
 	*out_mode = mode;
 	*out_filename = std::move(filename);
 	*out_sha1 = sha1;
@@ -328,7 +346,7 @@ void memes_get_object_header(
 		throw std::runtime_error("hdr spc");
 
 	/* see also git_object_typeisloose (as used by odb_loose.c) */
-	if ((type == object_string2type(data.substr(0, spc))) == NS_GIT_OBJ_BAD)
+	if ((type = object_string2type(data.substr(0, spc))) == NS_GIT_OBJ_BAD)
 		throw std::runtime_error("hdr type");
 
 	spc++;
@@ -442,6 +460,48 @@ NsGitObject read_object(
 		NsGitObject nsgitobj(oid, inflated_type, std::move(inflated), inflated_offset, inflated_size, nsgitobject_normal_tag_t());
 		return nsgitobj;
 	}
+}
+
+void treelist_visit(const std::string &repopath, treemap_t *treemap, treeset_t *markset, NsGitObject tree)
+{
+	/* = if n is not marked (i.e. has not been visited yet) then = */
+	if (markset->find(tree.m_oid) == markset->end()) {
+		/* = mark n = */
+		markset->insert(tree.m_oid);
+		/* = for each node m with an edge from n to m do = */
+		size_t             parse_offset = 0;
+		unsigned long long mode         = 0;
+		std::string        filename;
+		ns_git_oid         objoid       = {};
+		do {
+			memes_tree(tree.m_inflated, tree.m_inflated_offset, &parse_offset, &mode, &filename, &objoid);
+			if (mode != NS_GIT_FILEMODE_TREE)
+				continue;
+			NsGitObject subtree = read_object(repopath, objoid, 1);
+			/* = visit(m) = */
+			treelist_visit(repopath, treemap, markset, std::move(subtree));
+		} while (parse_offset != -1);
+		/* = add n to head of L = */
+		if (! treemap->insert(std::make_pair(tree.m_oid, std::move(tree))).second)
+			throw std::runtime_error("treemap exist");
+	}
+}
+
+treemap_t treelist_recursive(
+	const std::string &repopath,
+	ns_git_oid tree_oid)
+{
+	treemap_t treemap;
+	treeset_t markset;
+
+	NsGitObject tree = read_object(repopath, tree_oid, true);
+
+	if (tree.m_type != NS_GIT_OBJ_TREE)
+		throw std::runtime_error("tree type");
+
+	treelist_visit(repopath, &treemap, &markset, std::move(tree));
+
+	return treemap;
 }
 
 }
