@@ -242,7 +242,6 @@ public:
 		m_thread_exc()
 	{
 		m_sock->Connect(addr);
-		m_thread.reset(new std::thread(&SelfupWork::threadFunc, this));
 	}
 
 	void threadFunc()
@@ -257,10 +256,23 @@ public:
 
 	virtual void virtualThreadFunc() = 0;
 
+	void start()
+	{
+		m_thread.reset(new std::thread(&SelfupWork::threadFunc, this));
+	}
+
 	void join()
 	{
-		if (m_thread_exc)
-			std::rethrow_exception(m_thread_exc);
+		m_thread->join();
+
+		if (m_thread_exc) {
+			try {
+				std::rethrow_exception(m_thread_exc);
+			}
+			catch (std::exception &e) {
+				throw;
+			}
+		}
 	}
 
 protected:
@@ -646,6 +658,7 @@ void selfup_start_crank(Address addr)
 	std::string cur_exe_filename = ns_filesys::current_executable_filename();
 	std::shared_ptr<SelfupConExt1> ext(new SelfupConExt1(cur_exe_filename));
 	std::unique_ptr<SelfupWork1> work(new SelfupWork1(addr, ext));
+	work->start();
 	work->join();
 
 	if (! ext->m_update_have)
@@ -670,6 +683,9 @@ int main(int argc, char **argv)
 {
 	if (git_libgit2_init() < 0)
 		throw std::runtime_error("libgit2 init");
+
+	tcpsocket_startup_helper();
+	selfup_start_crank(Address(AF_INET, 6757, 0x7F000001, address_ipv4_tag_t()));
 
 	return EXIT_SUCCESS;
 }
