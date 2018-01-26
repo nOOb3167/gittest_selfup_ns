@@ -85,12 +85,14 @@ public:
 			if (!hasFile())
 				throw std::runtime_error("file has not");
 
-			m_fd = TCPSocket::unique_ptr_fd(new int(_open(m_filename.c_str(), _O_RDONLY | _O_BINARY)), TCPSocket::deleteFdFileNotSocket);
+			if (! m_fd || *m_fd < 0) {
+				m_fd = TCPSocket::unique_ptr_fd(new int(_open(m_filename.c_str(), _O_RDONLY | _O_BINARY)), TCPSocket::deleteFdFileNotSocket);
 
-			if (*m_fd < 0)
-				throw new std::runtime_error("file open");
+				if (*m_fd < 0)
+					throw new std::runtime_error("file open");
 
-			m_fd_size = computeFileSize(*m_fd);
+				m_fd_size = computeFileSize(*m_fd);
+			}
 		}
 
 		static size_t computeFileSize(int fd)
@@ -379,34 +381,40 @@ public:
 
 	void threadFuncWrite()
 	{
-		std::unique_lock<std::mutex> lock(m_write_mutex);
 		while (true) {
+			std::unique_lock<std::mutex> lock(m_write_mutex);
 			m_write_cv.wait(lock, [&]() { return ! m_write_queue.empty(); });
 			WriteQueueEntry wqe = m_write_queue.front();
 			m_write_queue.pop_front();
+			lock.unlock();
 			if (wqe.m_is_exit)
 				return;
-			assert(! wqe.m_d->m_queue_send.empty());
-			SendQueueEntry &snd = wqe.m_d->m_queue_send.front();
+			while (! wqe.m_d->m_queue_send.empty()) {
+				threadfuncHelperWriteOneEntry(wqe, wqe.m_d->m_queue_send.front());
+				wqe.m_d->m_queue_send.pop_front();
+			}
+		}
+	}
+
+	void threadfuncHelperWriteOneEntry(const WriteQueueEntry &wqe, SendQueueEntry &snd)
+	{
+		if (snd.hasFile()) {
 			// FIXME: here you would use the write->TCP_CORK/MSG_MORE->sendfile combo
 			/* prep write */
 			snd.ensureFile();
 			size_t off = 0;
 			/* packet portion write */
-			while (!tcpasync_frame_write_helper_off_isend(snd.m_packet.getDataSize(), off)) {
-				while (tcpasync_frame_write_helper(*wqe.m_fd, &snd.m_packet, snd.m_fd_size, &off))
-				{}
-				if (tcpasync_frame_write_helper_off_isend(snd.m_packet.getDataSize(), off))
-					break;
-				while (!tcpasync_select_oneshot(*wqe.m_fd, TCPASYNC_SELECT_LONGISH_TIMEOUT_MS))
-				{}
-			}
+			tcpasync_general_write_helper(*wqe.m_fd, &snd.m_packet, snd.m_fd_size, &off);
+			assert(tcpasync_frame_write_helper_off_isend(snd.m_packet.getDataSize(), off));
 			/* file portion write */
-			while (!(snd.m_fd_offset == snd.m_fd_size)) {
-				tcpasync_sendfile_write_helper_CRUTCH(*snd.m_fd, -1, snd.m_filename, snd.m_fd_size, &snd.m_fd_offset);
-			}
-			/* commit */
-			wqe.m_d->m_queue_send.pop_front();
+			tcpasync_sendfile_write_helper_CRUTCH(*wqe.m_fd, *snd.m_fd, snd.m_filename, snd.m_fd_size, &snd.m_fd_offset);
+			assert(snd.m_fd_offset == snd.m_fd_size);
+		}
+		else {
+			size_t off = 0;
+			/* packet portion write */
+			tcpasync_general_write_helper(*wqe.m_fd, &snd.m_packet, 0, &off);
+			assert(tcpasync_frame_write_helper_off_isend(snd.m_packet.getDataSize(), off));
 		}
 	}
 
@@ -473,6 +481,22 @@ bool tcpasync_frame_write_helper(
 	*off += sent;
 
 	return true;
+}
+
+void tcpasync_general_write_helper(
+	int fd,
+	NetworkPacket *packet,
+	size_t afterpacket_extra_size,
+	size_t *off)
+{
+	while (!tcpasync_frame_write_helper_off_isend(packet->getDataSize(), *off)) {
+		while (tcpasync_frame_write_helper(fd, packet, afterpacket_extra_size, off))
+		{}
+		if (tcpasync_frame_write_helper_off_isend(packet->getDataSize(), *off))
+			break;
+		while (!tcpasync_select_oneshot(fd, TCPASYNC_SELECT_LONGISH_TIMEOUT_MS))
+		{}
+	}
 }
 
 void tcpasync_sendfile_write_helper_CRUTCH(
