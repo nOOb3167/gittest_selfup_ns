@@ -21,9 +21,7 @@ public:
 		m_thrd(new TCPThreaded1(addr, thread_num, std::bind(&ServupWork::virtualFrameDispatch, this, std::placeholders::_1, std::placeholders::_2))),
 		m_thread(),
 		m_thread_exc()
-	{
-		m_thread.reset(new std::thread(&ServupWork::threadFunc, this));
-	}
+	{}
 
 	void threadFunc()
 	{
@@ -33,6 +31,11 @@ public:
 		catch (std::exception &) {
 			m_thread_exc = std::current_exception();
 		}
+	}
+
+	void start()
+	{
+		m_thread.reset(new std::thread(&ServupWork::threadFunc, this));
 	}
 
 	void join()
@@ -175,6 +178,7 @@ void servup_start_crank(Address addr)
 {
 	std::shared_ptr<ServupConExt2> ext(new ServupConExt2());
 	std::unique_ptr<ServupWork2> work(new ServupWork2(addr, SERVUP_THREAD_NUM, ext));
+	work->start();
 	work->join();
 }
 
