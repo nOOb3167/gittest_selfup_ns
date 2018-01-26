@@ -32,12 +32,15 @@ bool tcpasync_frame_write_helper(
 	NetworkPacket *packet,
 	size_t forged_frame_size,
 	size_t *off);
+void tcpasync_general_write_helper(
+	int fd,
+	NetworkPacket *packet,
+	size_t afterpacket_extra_size);
 void tcpasync_sendfile_write_helper_CRUTCH(
 	int fd,
 	int fd_file_to_send_IGNORED,
 	std::string filename_CRUTCH,
-	size_t off_size_limit_CRUTCH,
-	size_t *off);
+	size_t off_size_limit_CRUTCH);
 bool tcpasync_select_oneshot(int fd, int timeout_ms);
 
 class TCPAsync
@@ -57,8 +60,7 @@ public:
 			m_filename(),
 			m_offset(0),
 			m_fd(NULL, TCPSocket::deleteFdFileNotSocket),
-			m_fd_size(-1),
-			m_fd_offset(0)
+			m_fd_size(0)
 		{}
 
 		SendQueueEntry(NetworkPacket packet, const std::string &filename, SendQueueEntry_packet_file_tag_t) :
@@ -66,8 +68,7 @@ public:
 			m_filename(filename),
 			m_offset(0),
 			m_fd(NULL, TCPSocket::deleteFdFileNotSocket),
-			m_fd_size(-1),
-			m_fd_offset(0)
+			m_fd_size(0)
 		{}
 
 		SendQueueEntry(const SendQueueEntry &a)            = delete;
@@ -113,7 +114,6 @@ public:
 		size_t        m_offset;
 		TCPSocket::unique_ptr_fd m_fd;
 		size_t        m_fd_size;
-		size_t        m_fd_offset;
 	};
 
 	class SockData
@@ -400,21 +400,12 @@ public:
 	{
 		if (snd.hasFile()) {
 			// FIXME: here you would use the write->TCP_CORK/MSG_MORE->sendfile combo
-			/* prep write */
 			snd.ensureFile();
-			size_t off = 0;
-			/* packet portion write */
-			tcpasync_general_write_helper(*wqe.m_fd, &snd.m_packet, snd.m_fd_size, &off);
-			assert(tcpasync_frame_write_helper_off_isend(snd.m_packet.getDataSize(), off));
-			/* file portion write */
-			tcpasync_sendfile_write_helper_CRUTCH(*wqe.m_fd, *snd.m_fd, snd.m_filename, snd.m_fd_size, &snd.m_fd_offset);
-			assert(snd.m_fd_offset == snd.m_fd_size);
+			tcpasync_general_write_helper(*wqe.m_fd, &snd.m_packet, snd.m_fd_size);
+			tcpasync_sendfile_write_helper_CRUTCH(*wqe.m_fd, *snd.m_fd, snd.m_filename, snd.m_fd_size);
 		}
 		else {
-			size_t off = 0;
-			/* packet portion write */
-			tcpasync_general_write_helper(*wqe.m_fd, &snd.m_packet, 0, &off);
-			assert(tcpasync_frame_write_helper_off_isend(snd.m_packet.getDataSize(), off));
+			tcpasync_general_write_helper(*wqe.m_fd, &snd.m_packet, 0);
 		}
 	}
 
@@ -486,13 +477,13 @@ bool tcpasync_frame_write_helper(
 void tcpasync_general_write_helper(
 	int fd,
 	NetworkPacket *packet,
-	size_t afterpacket_extra_size,
-	size_t *off)
+	size_t afterpacket_extra_size)
 {
-	while (!tcpasync_frame_write_helper_off_isend(packet->getDataSize(), *off)) {
-		while (tcpasync_frame_write_helper(fd, packet, afterpacket_extra_size, off))
+	size_t off = 0;
+	while (!tcpasync_frame_write_helper_off_isend(packet->getDataSize(), off)) {
+		while (tcpasync_frame_write_helper(fd, packet, afterpacket_extra_size, &off))
 		{}
-		if (tcpasync_frame_write_helper_off_isend(packet->getDataSize(), *off))
+		if (tcpasync_frame_write_helper_off_isend(packet->getDataSize(), off))
 			break;
 		while (!tcpasync_select_oneshot(fd, TCPASYNC_SELECT_LONGISH_TIMEOUT_MS))
 		{}
@@ -503,14 +494,13 @@ void tcpasync_sendfile_write_helper_CRUTCH(
 	int fd,
 	int fd_file_to_send_IGNORED,
 	std::string filename_CRUTCH,
-	size_t off_size_limit_CRUTCH,
-	size_t *off)
+	size_t off_size_limit_CRUTCH)
 {
 	std::string data(ns_filesys::file_read(filename_CRUTCH));
 	if (data.size() != off_size_limit_CRUTCH)
 		throw std::runtime_error("size limit CRUTCH");
 	size_t writeoff = 0;
-	while (!(writeoff == data.size())) {
+	while (!(writeoff == off_size_limit_CRUTCH)) {
 		int sent = send(fd, data.data() + writeoff, data.size() - writeoff, 0);
 
 		if (sent == 0)
@@ -525,8 +515,6 @@ void tcpasync_sendfile_write_helper_CRUTCH(
 
 		writeoff += sent;
 	}
-
-	*off + writeoff;
 }
 
 bool tcpasync_select_oneshot(int fd, int timeout_ms)
