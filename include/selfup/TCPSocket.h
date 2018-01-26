@@ -77,10 +77,10 @@ public:
 	typedef ::std::shared_ptr<int>                   shared_ptr_fd;
 
 	TCPSocket() :
-		m_handle(new int(socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP)), deleteFd)
+		m_handle(new int(socket(AF_INET, SOCK_STREAM, IPPROTO_TCP)), deleteFd)
 	{
 		if (*m_handle < 0)
-			throw std::runtime_error("UDPSocket socket");
+			throw std::runtime_error("TCPSocket socket");
 	}
 
 	void Connect(Address addr)
@@ -129,7 +129,7 @@ public:
 		int rcvt = recv(*m_handle, (char *) data, size, 0);
 
 		if (rcvt < 0)
-			throw std::runtime_error("TCPSocket send sent");
+			throw std::runtime_error("TCPSocket recv rcvt");
 
 		return rcvt;
 	}
