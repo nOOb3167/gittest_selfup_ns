@@ -100,7 +100,7 @@ std::string file_read(
 	if (! ff.good())
 		throw FilesysExc("ifstream close");
 
-	return ss.str();
+	return std::move(ss.str());
 }
 
 

@@ -21,6 +21,24 @@
 #define TCPASYNC_FRAME_SIZE_MAX (256 * 1024 * 1024)
 
 #define TCPASYNC_WRITE_THREAD_NUM 8
+#define TCPASYNC_SELECT_LONGISH_TIMEOUT_MS 15000
+
+int tcpasync_get_sock_error();
+bool tcpasync_frame_write_helper_off_isend(
+	size_t packet_data_size,
+	size_t off);
+bool tcpasync_frame_write_helper(
+	int fd,
+	NetworkPacket *packet,
+	size_t forged_frame_size,
+	size_t *off);
+void tcpasync_sendfile_write_helper_CRUTCH(
+	int fd,
+	int fd_file_to_send_IGNORED,
+	std::string filename_CRUTCH,
+	size_t off_size_limit_CRUTCH,
+	size_t *off);
+bool tcpasync_select_oneshot(int fd, int timeout_ms);
 
 class TCPAsync
 {
@@ -36,6 +54,7 @@ public:
 	public:
 		SendQueueEntry(NetworkPacket packet, sendqueueentry_packet_tag_t) :
 			m_packet(std::move(packet)),
+			m_filename(),
 			m_offset(0),
 			m_fd(NULL, TCPSocket::deleteFdFileNotSocket),
 			m_fd_size(-1),
@@ -44,22 +63,12 @@ public:
 
 		SendQueueEntry(NetworkPacket packet, const std::string &filename, SendQueueEntry_packet_file_tag_t) :
 			m_packet(std::move(packet)),
+			m_filename(filename),
 			m_offset(0),
-			m_fd(new int(_open(filename.c_str(), _O_RDONLY | _O_BINARY)), TCPSocket::deleteFdFileNotSocket),
+			m_fd(NULL, TCPSocket::deleteFdFileNotSocket),
 			m_fd_size(-1),
 			m_fd_offset(0)
-		{
-#ifndef _WIN32
-#error
-#endif
-			if (*m_fd < 0)
-				throw new std::runtime_error("file open");
-			struct _stat buf = {};
-			if (_fstat(*m_fd, &buf) == -1)
-				throw new std::runtime_error("file stat");
-			assert((buf.st_mode & _S_IFREG) == _S_IFREG);
-			m_fd_size = buf.st_size;
-		}
+		{}
 
 		SendQueueEntry(const SendQueueEntry &a)            = delete;
 		SendQueueEntry& operator=(const SendQueueEntry &a) = delete;
@@ -68,11 +77,37 @@ public:
 
 		bool hasFile()
 		{
-			return (m_fd && *m_fd >= 0);
+			return !m_filename.empty();
+		}
+
+		void ensureFile()
+		{
+			if (!hasFile())
+				throw std::runtime_error("file has not");
+
+			m_fd = TCPSocket::unique_ptr_fd(new int(_open(m_filename.c_str(), _O_RDONLY | _O_BINARY)), TCPSocket::deleteFdFileNotSocket);
+
+			if (*m_fd < 0)
+				throw new std::runtime_error("file open");
+
+			m_fd_size = computeFileSize(*m_fd);
+		}
+
+		static size_t computeFileSize(int fd)
+		{
+#ifndef _WIN32
+#error
+#endif
+			struct _stat buf = {};
+			if (_fstat(fd, &buf) == -1)
+				throw new std::runtime_error("file stat");
+			assert((buf.st_mode & _S_IFREG) == _S_IFREG);
+			return buf.st_size;
 		}
 
 	public:
 		NetworkPacket m_packet;
+		std::string   m_filename;
 		size_t        m_offset;
 		TCPSocket::unique_ptr_fd m_fd;
 		size_t        m_fd_size;
@@ -207,12 +242,6 @@ public:
 	virtual bool virtualFrameWrite(const TCPSocket::shared_ptr_fd &fd, const std::shared_ptr<SockData> &d) = 0;
 	virtual void virtualFrameDispatch(NetworkPacket *packet, Respond *respond) = 0;
 
-protected:
-	int getSockError()
-	{
-		return WSAGetLastError();
-	}
-
 private:
 	TCPSocket::unique_ptr_fd m_listen;
 	socks_t m_socks;
@@ -292,7 +321,7 @@ public:
 
 			int rcvt = recv(*fd, (char *)wait_ptr, wait_for, 0);
 
-			if (rcvt < 0 && getSockError() == WSAEWOULDBLOCK)
+			if (rcvt < 0 && tcpasync_get_sock_error() == WSAEWOULDBLOCK)
 				readmore = false;
 			else if (rcvt < 0)
 				throw std::runtime_error("TCPSocket recv rcvt");
@@ -337,36 +366,10 @@ public:
 	/* @ret: writemore */
 	bool frameWriteNormal(const TCPSocket::shared_ptr_fd &fd, const std::shared_ptr<SockData> &d, SendQueueEntry &snd)
 	{
-		assert(snd.m_offset <= (9 + snd.m_packet.getDataSize()));
-
-		size_t sz = snd.m_packet.getDataSize();
-		uint8_t hdr[9] = { 'F', 'R', 'A', 'M', 'E', 0, 0, 0, 0 };
-		hdr[5] = ((sz >> 24) & 0xFF); hdr[6] = ((sz >> 16) & 0xFF); hdr[7] = ((sz >> 8) & 0xFF); hdr[8] = ((sz >> 0) & 0xFF);
-
-		size_t send_for = 0;
-
-		if (snd.m_offset < 9)
-			send_for = 9 - snd.m_offset;
-		if (snd.m_offset >= 9)
-			send_for = (9 + snd.m_packet.getDataSize()) - snd.m_offset;
-
-		const uint8_t *send_ptr = snd.m_offset < 9 ? hdr + snd.m_offset : snd.m_packet.getDataPtr() + (snd.m_offset - 9);
-
-		int sent = send(*fd, (char *)send_ptr, send_for, 0);
-
-		if (sent < 0 && getSockError() == WSAEWOULDBLOCK)
-			return false;
-		else if (sent < 0)
-			throw std::runtime_error("TCPSocket send sent");
-		else {
-			assert(sent != 0);
-
-			snd.m_offset += sent;
-
-			if (snd.m_offset == (9 + snd.m_packet.getDataSize()))
-				d->m_queue_send.pop_front();
-		}
-		return true;
+		bool writemore = tcpasync_frame_write_helper(*fd, &snd.m_packet, snd.m_packet.getDataSize(), &snd.m_offset);
+		if (tcpasync_frame_write_helper_off_isend(snd.m_packet.getDataSize(), snd.m_offset))
+			d->m_queue_send.pop_front();
+		return writemore;
 	}
 
 	void virtualFrameDispatch(NetworkPacket *packet, Respond *respond) override
@@ -385,9 +388,24 @@ public:
 				return;
 			assert(! wqe.m_d->m_queue_send.empty());
 			SendQueueEntry &snd = wqe.m_d->m_queue_send.front();
-			assert(snd.hasFile());
 			// FIXME: here you would use the write->TCP_CORK/MSG_MORE->sendfile combo
-			// FIXME: implement
+			/* prep write */
+			snd.ensureFile();
+			size_t off = 0;
+			/* packet portion write */
+			while (!tcpasync_frame_write_helper_off_isend(snd.m_packet.getDataSize(), off)) {
+				while (tcpasync_frame_write_helper(*wqe.m_fd, &snd.m_packet, snd.m_fd_size, &off))
+				{}
+				if (tcpasync_frame_write_helper_off_isend(snd.m_packet.getDataSize(), off))
+					break;
+				while (!tcpasync_select_oneshot(*wqe.m_fd, TCPASYNC_SELECT_LONGISH_TIMEOUT_MS))
+				{}
+			}
+			/* file portion write */
+			while (!(snd.m_fd_offset == snd.m_fd_size)) {
+				tcpasync_sendfile_write_helper_CRUTCH(*snd.m_fd, -1, snd.m_filename, snd.m_fd_size, &snd.m_fd_offset);
+			}
+			/* commit */
 			wqe.m_d->m_queue_send.pop_front();
 		}
 	}
@@ -399,5 +417,114 @@ private:
 	std::vector<std::thread> m_write_thread;
 	std::deque<WriteQueueEntry> m_write_queue;
 };
+
+int tcpasync_get_sock_error()
+{
+	return WSAGetLastError();
+}
+
+bool tcpasync_frame_write_helper_off_isend(
+	size_t packet_data_size,
+	size_t off)
+{
+	const size_t off_end_hdr = 9;
+	const size_t off_end_buf = packet_data_size;
+	
+	assert(!(off > off_end_hdr + off_end_buf)); /* overrun ? */
+
+	return off >= off_end_hdr + off_end_buf;
+}
+
+bool tcpasync_frame_write_helper(
+	int fd,
+	NetworkPacket *packet,
+	size_t afterpacket_extra_size,
+	size_t *off)
+{
+	const size_t sz = packet->getDataSize();
+	const size_t fsz = sz + afterpacket_extra_size;
+	const uint8_t hdr[9] = { 'F', 'R', 'A', 'M', 'E', (fsz >> 24) & 0xFF, (fsz >> 16) & 0xFF, (fsz >> 8) & 0xFF, (fsz >> 0) & 0xFF };
+
+	const size_t off_end_hdr = 9;
+	const size_t off_end_buf = sz;
+
+	assert(!tcpasync_frame_write_helper_off_isend(sz, *off));
+	
+	const bool off_hdr_is = *off < off_end_hdr;
+
+	const size_t off_hdr = *off;                /* used while sending hdr (off_hdr_is) */
+	const size_t off_buf = *off - off_end_hdr;  /* used while sending buf (!off_hdr_is) */
+
+	const size_t rem_hdr = off_end_hdr - off_hdr;
+	const size_t rem_buf = off_end_buf - off_buf;
+
+	const size_t   send_for = off_hdr_is ? rem_hdr : rem_buf;
+	const uint8_t *send_ptr = off_hdr_is ? hdr + off_hdr : packet->getDataPtr() + off_buf;
+
+	int sent = send(fd, (char *) send_ptr, send_for, 0);
+
+	if (sent == 0)
+		throw std::runtime_error("send sent zero");
+	else if (sent < 0 && tcpasync_get_sock_error() != WSAEWOULDBLOCK)
+		throw std::runtime_error("TCPSocket send sent");
+	else if (sent < 0)
+		return false;
+
+	*off += sent;
+
+	return true;
+}
+
+void tcpasync_sendfile_write_helper_CRUTCH(
+	int fd,
+	int fd_file_to_send_IGNORED,
+	std::string filename_CRUTCH,
+	size_t off_size_limit_CRUTCH,
+	size_t *off)
+{
+	std::string data(ns_filesys::file_read(filename_CRUTCH));
+	if (data.size() != off_size_limit_CRUTCH)
+		throw std::runtime_error("size limit CRUTCH");
+	size_t writeoff = 0;
+	while (!(writeoff == data.size())) {
+		int sent = send(fd, data.data() + writeoff, data.size() - writeoff, 0);
+
+		if (sent == 0)
+			throw std::runtime_error("send sent zero");
+		else if (sent < 0 && tcpasync_get_sock_error() != WSAEWOULDBLOCK)
+			throw std::runtime_error("send sent");
+		else if (sent < 0) {
+			while (!tcpasync_select_oneshot(fd, TCPASYNC_SELECT_LONGISH_TIMEOUT_MS))
+			{}
+			continue;
+		}
+
+		writeoff += sent;
+	}
+
+	*off + writeoff;
+}
+
+bool tcpasync_select_oneshot(int fd, int timeout_ms)
+{
+	fd_set write_set;
+
+	FD_ZERO(&write_set);
+	FD_SET(fd, &write_set);
+
+	struct timeval tv = {};
+	tv.tv_sec = 0;
+	tv.tv_usec = timeout_ms * 1000;
+
+	int result = select(fd + 1, NULL, &write_set, NULL, &tv);
+
+	if (result < 0)
+		throw std::runtime_error("TCPAsync wait");
+
+	if (result == 0)
+		return false;
+
+	return FD_ISSET(fd, &write_set);
+}
 
 #endif /* _TCPASYNC_H_ */
