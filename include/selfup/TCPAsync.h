@@ -20,6 +20,8 @@
 
 #define TCPASYNC_FRAME_SIZE_MAX (256 * 1024 * 1024)
 
+TCPSocket::unique_ptr_fd tcpthreaded_socket_listen_helper(Address addr);
+TCPSocket::unique_ptr_fd tcpthreaded_socket_accept_helper(int fd);
 NetworkPacket tcpthreaded_blocking_read_helper(int fd);
 void tcpthreaded_blocking_write_helper(int fd, NetworkPacket *packet, size_t afterpacket_extra_size);
 void tcpthreaded_blocking_sendfile_helper(int fd, int fdfile, size_t size);
@@ -66,19 +68,8 @@ public:
 	};
 
 	TCPThreaded(Address addr, size_t thread_num) :
-		m_listen(new int(socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP)), TCPSocket::deleteFd)
+		m_listen(tcpthreaded_socket_listen_helper(addr))
 	{
-		if (*m_listen < 0)
-			throw std::runtime_error("socket");
-		struct sockaddr_in sockaddr = {};
-		sockaddr.sin_family = addr.getFamily();
-		sockaddr.sin_port = htons(addr.getPort());
-		sockaddr.sin_addr.s_addr = htonl(addr.getAddr4());
-		if (bind(*m_listen, (struct sockaddr *) &sockaddr, sizeof sockaddr) < 0)
-			throw std::runtime_error("bind");
-		if (listen(*m_listen, 5) < 0)
-			throw std::runtime_error("listen");
-
 		for (size_t i = 0; i < thread_num; i++)
 			m_thread_exc.push_back(std::exception_ptr());
 		for (size_t i = 0; i < thread_num; i++)
@@ -88,11 +79,7 @@ public:
 	void ListenLoop()
 	{
 		while (true) {
-			struct sockaddr_in sockaddr = {};
-			int socklen = sizeof sockaddr; // FIXME: socklen_t for NIX
-			TCPSocket::unique_ptr_fd nsock(new int(accept(*m_listen, (struct sockaddr *) &sockaddr, &socklen)), TCPSocket::deleteFd);
-			if (*nsock < 0)
-				throw std::runtime_error("accept");
+			TCPSocket::unique_ptr_fd nsock(tcpthreaded_socket_accept_helper(*m_listen));
 		
 			{
 				std::unique_lock<std::mutex> lock(m_queue_mutex);
@@ -160,6 +147,32 @@ protected:
 private:
 	function_framedispatch_t m_framedispatch;
 };
+
+TCPSocket::unique_ptr_fd tcpthreaded_socket_listen_helper(Address addr)
+{
+	TCPSocket::unique_ptr_fd sock(new int(socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP)), TCPSocket::deleteFd);
+	if (*sock < 0)
+		throw std::runtime_error("socket");
+	struct sockaddr_in sockaddr = {};
+	sockaddr.sin_family = addr.getFamily();
+	sockaddr.sin_port = htons(addr.getPort());
+	sockaddr.sin_addr.s_addr = htonl(addr.getAddr4());
+	if (bind(*sock, (struct sockaddr *) &sockaddr, sizeof sockaddr) < 0)
+		throw std::runtime_error("bind");
+	if (listen(*sock, 5) < 0)
+		throw std::runtime_error("listen");
+	return sock;
+}
+
+TCPSocket::unique_ptr_fd tcpthreaded_socket_accept_helper(int fd)
+{
+	struct sockaddr_in sockaddr = {};
+	int socklen = sizeof sockaddr; // FIXME: socklen_t for NIX
+	TCPSocket::unique_ptr_fd nsock(new int(accept(fd, (struct sockaddr *) &sockaddr, &socklen)), TCPSocket::deleteFd);
+	if (*nsock < 0)
+		throw std::runtime_error("accept");
+	return nsock;
+}
 
 NetworkPacket tcpthreaded_blocking_read_helper(int fd)
 {
