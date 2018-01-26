@@ -10,8 +10,8 @@
 #include <winsock2.h>
 #include <io.h>
 #include <fcntl.h>
-#include <sys\types.h>
-#include <sys\stat.h>
+#include <sys/types.h>
+#include <sys/stat.h>
 #else
 #include <arpa/inet.h>
 #include <netinet/in.h>
