@@ -57,10 +57,15 @@ public:
 	class ThreadCtx : public std::enable_shared_from_this<ThreadCtx>
 	{
 	public:
-		ThreadCtx(const std::function<void(TCPThreaded *, const std::shared_ptr<ThreadCtx> &)> &func, TCPThreaded *tcpthr, size_t thread_idx) :
-			m_thread(func, tcpthr, shared_from_this()),
+		ThreadCtx(size_t thread_idx) :
+			m_thread(),
 			m_thread_idx(thread_idx)
 		{}
+
+		void start(const std::function<void(TCPThreaded *, const std::shared_ptr<ThreadCtx> &)> &func, TCPThreaded *tcpthr)
+		{
+			m_thread = std::move(std::thread(func, tcpthr, shared_from_this()));
+		}
 
 	public:
 		std::thread m_thread;
@@ -73,7 +78,9 @@ public:
 		for (size_t i = 0; i < thread_num; i++)
 			m_thread_exc.push_back(std::exception_ptr());
 		for (size_t i = 0; i < thread_num; i++)
-			m_thread.push_back(std::shared_ptr<ThreadCtx>(new ThreadCtx(&TCPThreaded::threadFunc, this, i)));
+			m_thread.push_back(std::shared_ptr<ThreadCtx>(new ThreadCtx(i)));
+		for (size_t i = 0; i < thread_num; i++)
+			m_thread[i]->start(&TCPThreaded::threadFunc, this);
 	}
 
 	void ListenLoop()

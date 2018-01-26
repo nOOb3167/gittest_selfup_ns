@@ -37,6 +37,8 @@ public:
 
 	void join()
 	{
+		m_thread->join();
+
 		if (m_thread_exc)
 			std::rethrow_exception(m_thread_exc);
 	}
