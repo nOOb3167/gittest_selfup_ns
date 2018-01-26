@@ -44,14 +44,43 @@ void tcpasync_sendfile_write_helper_CRUTCH(
 	size_t off_size_limit_CRUTCH);
 bool tcpasync_select_oneshot(int fd, int timeout_ms);
 
+NetworkPacket tcpthreaded_blocking_read_helper(int fd);
+void tcpthreaded_blocking_write_helper(int fd, NetworkPacket *packet, size_t afterpacket_extra_size);
+void tcpthreaded_blocking_sendfile_helper(int fd, int fdfile, size_t size);
+TCPSocket::unique_ptr_fd tcpthreaded_file_open_size_helper(const std::string &filename, size_t *o_size);
+
 class TCPThreaded
 {
 public:
-	class ThreadCtx
+	class Respond
 	{
 	public:
-		ThreadCtx(const std::function<void(const std::shared_ptr<ThreadCtx> &)> &func, size_t thread_idx) :
-			m_thread(func, this),
+		Respond(int fd) :
+			m_fd(fd)
+		{}
+
+		void respondOneshot(NetworkPacket packet)
+		{
+			tcpthreaded_blocking_write_helper(m_fd, &packet, 0);
+		}
+
+		void respondOneshotSendfile(NetworkPacket packet, const std::string &filename)
+		{
+			size_t size = 0;
+			TCPSocket::unique_ptr_fd fdfile(tcpthreaded_file_open_size_helper(filename, &size));
+			tcpthreaded_blocking_write_helper(m_fd, &packet, size);
+			tcpthreaded_blocking_sendfile_helper(m_fd, *fdfile, size);
+		}
+
+	private:
+		int m_fd;
+	};
+
+	class ThreadCtx : public std::enable_shared_from_this<ThreadCtx>
+	{
+	public:
+		ThreadCtx(const std::function<void(TCPThreaded *, const std::shared_ptr<ThreadCtx> &)> &func, TCPThreaded *tcpthr, size_t thread_idx) :
+			m_thread(func, tcpthr, shared_from_this()),
 			m_thread_idx(thread_idx)
 		{}
 
@@ -77,7 +106,7 @@ public:
 		for (size_t i = 0; i < thread_num; i++)
 			m_thread_exc.push_back(std::exception_ptr());
 		for (size_t i = 0; i < thread_num; i++)
-			m_thread.push_back(new ThreadCtx(std::bind(&TCPThreaded::threadFunc, this, std::placeholders::_1), i));
+			m_thread.push_back(std::shared_ptr<ThreadCtx>(new ThreadCtx(&TCPThreaded::threadFunc, this, i)));
 	}
 
 	void ListenLoop()
@@ -575,7 +604,7 @@ NetworkPacket tcpthreaded_blocking_read_helper(int fd)
 	int rcvt = recv(fd, (char *) hdr, 9, MSG_WAITALL);
 
 	if (rcvt < 0 || rcvt == 0 || rcvt != 9)
-		throw std::runtime_error("TCPSocket recv rcvt");
+		throw std::runtime_error("recv rcvt");
 
 	/* validate */
 
@@ -588,14 +617,66 @@ NetworkPacket tcpthreaded_blocking_read_helper(int fd)
 	std::vector<uint8_t> buf;
 	buf.resize(sz);
 
-	int rcvt = recv(fd, (char *) buf.data(), buf.size(), MSG_WAITALL);
+	int rcvt2 = recv(fd, (char *) buf.data(), buf.size(), MSG_WAITALL);
 
-	if (rcvt < 0 || rcvt == 0 || rcvt != buf.size())
-		throw std::runtime_error("TCPSocket recv rcvt");
+	if (rcvt2 < 0 || rcvt2 == 0 || rcvt2 != buf.size())
+		throw std::runtime_error("recv rcvt");
 
 	NetworkPacket packet(std::move(buf), networkpacket_vec_steal_tag_t());
 
 	return packet;
+}
+
+void tcpthreaded_blocking_write_helper(int fd, NetworkPacket *packet, size_t afterpacket_extra_size)
+{
+	/* write header */
+
+	const size_t fsz = packet->getDataSize() + afterpacket_extra_size;
+
+	const uint8_t hdr[9] = { 'F', 'R', 'A', 'M', 'E', (fsz >> 24) & 0xFF, (fsz >> 16) & 0xFF, (fsz >> 8) & 0xFF, (fsz >> 0) & 0xFF };
+
+	int sent = send(fd, (char *) hdr, 9, 0);
+
+	if (sent < 0 || sent == 0 || sent != 9)
+		throw std::runtime_error("send sent");
+
+	int sent2 = send(fd, (char *) packet->getDataPtr(), packet->getDataSize(), 0);
+
+	if (sent2 < 0 || sent2 == 0 || sent2 != packet->getDataSize())
+		throw std::runtime_error("send sent");
+
+}
+
+void tcpthreaded_blocking_sendfile_helper(int fd, int fdfile, size_t size)
+{
+	std::string buf(size, '\0');
+	
+	int rcvt = _read(fdfile, (char *) buf.data(), buf.size());
+
+	if (rcvt < 0 || rcvt == 0 || rcvt != buf.size())
+		throw std::runtime_error("recv rcvt");
+
+	int sent = send(fd, buf.data(), buf.size(), 0);
+
+	if (sent < 0 || sent == 0 || sent != buf.size())
+		throw std::runtime_error("send sent");
+}
+
+TCPSocket::unique_ptr_fd tcpthreaded_file_open_size_helper(const std::string &filename, size_t *o_size)
+{
+	TCPSocket::unique_ptr_fd fdfile(new int(_open(filename.c_str(), _O_RDONLY | _O_BINARY)), TCPSocket::deleteFdFileNotSocket);
+
+	if (fdfile < 0)
+		throw new std::runtime_error("file open");
+
+	struct _stat buf = {};
+	if (_fstat(*fdfile, &buf) == -1)
+		throw new std::runtime_error("file stat");
+	assert((buf.st_mode & _S_IFREG) == _S_IFREG);
+	const size_t size = buf.st_size;
+
+	*o_size = size;
+	return std::move(fdfile);
 }
 
 void tcpasync_general_write_helper(
