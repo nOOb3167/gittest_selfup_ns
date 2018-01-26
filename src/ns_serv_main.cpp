@@ -8,17 +8,17 @@
 #include <selfup/ns_helpers.h>
 #include <selfup/TCPAsync.h>
 
-#define SERVUP_ASYNC_TIMEOUT_MS 10000
+#define SERVUP_THREAD_NUM 16
 
 using namespace ns_git;
 
-typedef TCPAsync::Respond Respond;
+typedef TCPThreaded::Respond Respond;
 
 class ServupWork
 {
 public:
-	ServupWork(Address addr) :
-		m_async(new TCPAsync1(addr, std::bind(&ServupWork::virtualFrameDispatch, this, std::placeholders::_1, std::placeholders::_2))),
+	ServupWork(Address addr, size_t thread_num) :
+		m_thrd(new TCPThreaded1(addr, thread_num, std::bind(&ServupWork::virtualFrameDispatch, this, std::placeholders::_1, std::placeholders::_2))),
 		m_thread(),
 		m_thread_exc()
 	{
@@ -28,7 +28,7 @@ public:
 	void threadFunc()
 	{
 		try {
-			m_async->Loop(SERVUP_ASYNC_TIMEOUT_MS);
+			m_thrd->ListenLoop();
 		}
 		catch (std::exception &) {
 			m_thread_exc = std::current_exception();
@@ -45,7 +45,7 @@ protected:
 	virtual void virtualFrameDispatch(NetworkPacket *packet, Respond *respond) = 0;
 
 private:
-	std::unique_ptr<TCPAsync1>    m_async;
+	std::unique_ptr<TCPThreaded1>    m_thrd;
 	std::unique_ptr<std::thread>  m_thread;
 	std::exception_ptr            m_thread_exc;
 };
@@ -89,8 +89,8 @@ public:
 class ServupWork2 : public ServupWork
 {
 public:
-	ServupWork2(Address addr, std::shared_ptr<ServupConExt2> ext) :
-		ServupWork(addr),
+	ServupWork2(Address addr, size_t thread_num, std::shared_ptr<ServupConExt2> ext) :
+		ServupWork(addr, thread_num),
 		m_ext(ext)
 	{}
 
@@ -172,7 +172,7 @@ private:
 void servup_start_crank(Address addr)
 {
 	std::shared_ptr<ServupConExt2> ext(new ServupConExt2());
-	std::unique_ptr<ServupWork2> work(new ServupWork2(addr, ext));
+	std::unique_ptr<ServupWork2> work(new ServupWork2(addr, SERVUP_THREAD_NUM, ext));
 	work->join();
 }
 
