@@ -499,19 +499,19 @@ void tcpasync_sendfile_write_helper_CRUTCH(
 	std::string data(ns_filesys::file_read(filename_CRUTCH));
 	if (data.size() != off_size_limit_CRUTCH)
 		throw std::runtime_error("size limit CRUTCH");
+
 	size_t writeoff = 0;
 	while (!(writeoff == off_size_limit_CRUTCH)) {
 		int sent = send(fd, data.data() + writeoff, data.size() - writeoff, 0);
 
-		if (sent == 0)
-			throw std::runtime_error("send sent zero");
-		else if (sent < 0 && tcpasync_get_sock_error() != WSAEWOULDBLOCK)
-			throw std::runtime_error("send sent");
-		else if (sent < 0) {
+		if (sent < 0 && tcpasync_get_sock_error() == WSAEWOULDBLOCK) {
 			while (!tcpasync_select_oneshot(fd, TCPASYNC_SELECT_LONGISH_TIMEOUT_MS))
 			{}
 			continue;
 		}
+
+		if (sent == 0 || sent < 0)
+			throw std::runtime_error("send sent");
 
 		writeoff += sent;
 	}
