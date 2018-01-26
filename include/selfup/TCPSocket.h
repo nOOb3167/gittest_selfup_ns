@@ -195,4 +195,13 @@ private:
 	unique_ptr_fd m_handle;
 };
 
+void tcpsocket_startup_helper()
+{
+	WORD versionRequested = MAKEWORD(1, 1);
+	WSADATA wsaData;
+
+	if (WSAStartup(versionRequested, &wsaData))
+		throw std::runtime_error("wsastartup");
+}
+
 #endif /* _TCPSOCKET_H_ */

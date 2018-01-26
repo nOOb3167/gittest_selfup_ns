@@ -150,7 +150,7 @@ private:
 
 TCPSocket::unique_ptr_fd tcpthreaded_socket_listen_helper(Address addr)
 {
-	TCPSocket::unique_ptr_fd sock(new int(socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP)), TCPSocket::deleteFd);
+	TCPSocket::unique_ptr_fd sock(new int(socket(AF_INET, SOCK_STREAM, IPPROTO_TCP)), TCPSocket::deleteFd);
 	if (*sock < 0)
 		throw std::runtime_error("socket");
 	struct sockaddr_in sockaddr = {};
