@@ -6,6 +6,7 @@
 #include <cstdint>
 #include <cstring>
 #include <deque>
+#include <exception>
 #include <functional>
 #include <map>
 #include <memory>
@@ -42,6 +43,97 @@ void tcpasync_sendfile_write_helper_CRUTCH(
 	std::string filename_CRUTCH,
 	size_t off_size_limit_CRUTCH);
 bool tcpasync_select_oneshot(int fd, int timeout_ms);
+
+class TCPThreaded
+{
+public:
+	class ThreadCtx
+	{
+	public:
+		ThreadCtx(const std::function<void(const std::shared_ptr<ThreadCtx> &)> &func, size_t thread_idx) :
+			m_thread(func, this),
+			m_thread_idx(thread_idx)
+		{}
+
+	public:
+		std::thread m_thread;
+		size_t      m_thread_idx;
+	};
+
+	TCPThreaded(Address addr, size_t thread_num) :
+		m_listen(new int(socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP)), TCPSocket::deleteFd)
+	{
+		if (*m_listen < 0)
+			throw std::runtime_error("TCPAsync socket");
+		struct sockaddr_in sockaddr = {};
+		sockaddr.sin_family = addr.getFamily();
+		sockaddr.sin_port = htons(addr.getPort());
+		sockaddr.sin_addr.s_addr = htonl(addr.getAddr4());
+		if (bind(*m_listen, (struct sockaddr *) &sockaddr, sizeof sockaddr) < 0)
+			throw std::runtime_error("TCPAsync bind");
+		if (listen(*m_listen, 5) < 0)
+			throw std::runtime_error("TCPAsync listen");
+
+		for (size_t i = 0; i < thread_num; i++)
+			m_thread_exc.push_back(std::exception_ptr());
+		for (size_t i = 0; i < thread_num; i++)
+			m_thread.push_back(new ThreadCtx(std::bind(&TCPThreaded::threadFunc, this, std::placeholders::_1), i));
+	}
+
+	void ListenLoop()
+	{
+		while (true) {
+			struct sockaddr_in sockaddr = {};
+			int socklen = sizeof sockaddr; // FIXME: socklen_t for NIX
+			TCPSocket::unique_ptr_fd nsock(new int(accept(*m_listen, (struct sockaddr *) &sockaddr, &socklen)), TCPSocket::deleteFd);
+			if (*nsock < 0)
+				throw std::runtime_error("TCPAsync accept");
+		
+			{
+				std::unique_lock<std::mutex> lock(m_queue_mutex);
+				m_queue_incoming.push_back(std::move(nsock));
+			}
+			m_queue_cv.notify_one();
+		}
+	}
+
+protected:
+	void threadFunc(const std::shared_ptr<ThreadCtx> &ctx)
+	{
+		try {
+			threadFunc2(ctx);
+		}
+		catch (std::exception &) {
+			m_thread_exc.at(ctx->m_thread_idx) = std::current_exception();
+		}
+	}
+
+	void threadFunc2(const std::shared_ptr<ThreadCtx> &ctx)
+	{
+		while (true) {
+			std::unique_lock<std::mutex> lock(m_queue_mutex);
+			m_queue_cv.wait(lock, [&]() { return !m_queue_incoming.empty(); });
+			TCPSocket::unique_ptr_fd fd = std::move(m_queue_incoming.front());
+			m_queue_incoming.pop_front();
+			lock.unlock();
+
+			while (true) {
+				NetworkPacket packet(tcpthreaded_blocking_read_helper(*fd));
+				frameDispatch(std::move(packet));
+			}
+		}
+	}
+
+	virtual void frameDispatch(NetworkPacket packet) = 0;
+
+private:
+	TCPSocket::unique_ptr_fd m_listen;
+	std::vector<std::exception_ptr> m_thread_exc;
+	std::vector<std::shared_ptr<ThreadCtx> > m_thread;
+	std::mutex m_queue_mutex;
+	std::condition_variable m_queue_cv;
+	std::deque<TCPSocket::unique_ptr_fd> m_queue_incoming;
+};
 
 class TCPAsync
 {
@@ -472,6 +564,38 @@ bool tcpasync_frame_write_helper(
 	*off += sent;
 
 	return true;
+}
+
+NetworkPacket tcpthreaded_blocking_read_helper(int fd)
+{
+	/* read header */
+
+	uint8_t hdr[9] = {};
+
+	int rcvt = recv(fd, (char *) hdr, 9, MSG_WAITALL);
+
+	if (rcvt < 0 || rcvt == 0 || rcvt != 9)
+		throw std::runtime_error("TCPSocket recv rcvt");
+
+	/* validate */
+
+	if (!!memcmp(hdr, "FRAME", 5))
+		throw ProtocolExc("frame magic");
+	const uint32_t sz = (hdr[5] << 24) | (hdr[6] << 16) | (hdr[7] << 8) | (hdr[8] << 0);
+
+	/* read packet */
+
+	std::vector<uint8_t> buf;
+	buf.resize(sz);
+
+	int rcvt = recv(fd, (char *) buf.data(), buf.size(), MSG_WAITALL);
+
+	if (rcvt < 0 || rcvt == 0 || rcvt != buf.size())
+		throw std::runtime_error("TCPSocket recv rcvt");
+
+	NetworkPacket packet(std::move(buf), networkpacket_vec_steal_tag_t());
+
+	return packet;
 }
 
 void tcpasync_general_write_helper(
