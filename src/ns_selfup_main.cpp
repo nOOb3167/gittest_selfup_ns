@@ -406,9 +406,8 @@ public:
 		/* request latest version git_oid */
 
 		NetworkPacket packet_req_latest(SELFUP_CMD_REQUEST_LATEST_COMMIT_TREE, networkpacket_cmd_tag_t());
-		char ref[] = "refs/heads/master";
-		packet_req_latest << (uint32_t) sizeof ref - 1;
-		packet_req_latest.outSizedStr(ref, sizeof ref - 1);
+		packet_req_latest << (uint32_t) m_ext->m_refname.size();
+		packet_req_latest.outSizedStr(m_ext->m_refname.data(), m_ext->m_refname.size());
 		m_respond->respondOneshot(std::move(packet_req_latest));
 
 		NetworkPacket res_latest_pkt = m_respond->waitFrame();
