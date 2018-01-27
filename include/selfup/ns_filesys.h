@@ -33,7 +33,9 @@ void file_write_frombuffer(
 	std::string filename,
 	const char *buf, size_t buf_len);
 
+std::string current_executable_relative_filename(std::string relative);
 std::string current_executable_filename();
+std::string current_executable_directory();
 
 void rename_file_file(
 	std::string src_filename,

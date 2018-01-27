@@ -269,7 +269,7 @@ public:
 			try {
 				std::rethrow_exception(m_thread_exc);
 			}
-			catch (std::exception &e) {
+			catch (std::exception &) {
 				throw;
 			}
 		}
@@ -644,9 +644,10 @@ void selfup_checkout(std::string repopath, std::string refname, std::string chec
 
 void selfup_start_mainupdate_crank(Address addr)
 {
-	//std::shared_ptr<SelfupConExt2> ext(new SelfupConExt2());
-	std::shared_ptr<SelfupConExt2> ext; assert(0);
+	std::string repopath = ns_filesys::current_executable_relative_filename("clnt_repo");
+	std::shared_ptr<SelfupConExt2> ext(new SelfupConExt2(repopath, "refs/heads/master"));
 	std::unique_ptr<SelfupWork2> work(new SelfupWork2(addr, ext));
+	work->start();
 	work->join();
 
 	if (! ext->m_update_have)
@@ -685,7 +686,8 @@ int main(int argc, char **argv)
 		throw std::runtime_error("libgit2 init");
 
 	tcpsocket_startup_helper();
-	selfup_start_crank(Address(AF_INET, 6757, 0x7F000001, address_ipv4_tag_t()));
+	//selfup_start_crank(Address(AF_INET, 6757, 0x7F000001, address_ipv4_tag_t()));
+	selfup_start_mainupdate_crank(Address(AF_INET, 6757, 0x7F000001, address_ipv4_tag_t()));
 
 	return EXIT_SUCCESS;
 }

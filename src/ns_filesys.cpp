@@ -21,6 +21,27 @@
 namespace ns_filesys
 {
 
+std::string ns_win_path_directory(std::string path)
+{
+	char Drive[_MAX_DRIVE] = {};
+	char Dir[_MAX_DIR] = {};
+	char FName[_MAX_FNAME] = {};
+	char Ext[_MAX_EXT] = {};
+
+	/* http://www.flounder.com/msdn_documentation_errors_and_omissions.htm
+	*    see for _splitpath: """no more than this many characters will be written to each buffer""" */
+	_splitpath(path.c_str(), Drive, Dir, FName, Ext);
+
+	std::string ret(_MAX_PATH, '\0');
+
+	if (!! _makepath_s((char *) ret.data(), ret.size(), Drive, Dir, NULL, NULL))
+		throw FilesysExc("makepath");
+
+	std::string ret2(ret.c_str());
+
+	return ret2;
+}
+
 std::string build_modified_filename(
 	std::string base_filename,
 	std::string expected_suffix,
@@ -52,7 +73,8 @@ std::string path_append_abs_rel(
 {
 	int r = 0;
 
-	size_t LenOutputPathTmp = 0;
+	if (relative.find("..") != std::string::npos)
+		throw FilesysExc("path doubledots");
 
 	/** maximum length for PathIsRelative and PathAppend **/
 	if (absolute.size() > MAX_PATH || relative.size() > MAX_PATH)
@@ -67,7 +89,7 @@ std::string path_append_abs_rel(
 	/* prep output buffer with absolute path */
 
 	std::string out(absolute);
-	out.append('\0');
+	out.append(1, '\0');
 	out.resize(GS_MAX(out.size(), MAX_PATH));
 
 	/* append */
@@ -129,6 +151,13 @@ void file_write_frombuffer(
 		throw FilesysExc("ofstream close");
 }
 
+std::string current_executable_relative_filename(std::string relative)
+{
+	std::string cur_exe_dir = current_executable_directory();
+	std::string combined = path_append_abs_rel(cur_exe_dir, relative);
+	return combined;
+}
+
 std::string current_executable_filename()
 {
 	std::string fname(1024, '\0');
@@ -139,6 +168,14 @@ std::string current_executable_filename()
 	fname.resize(LenFileName);
 
 	return fname;
+}
+
+std::string current_executable_directory()
+{
+
+	std::string cur_exe_filename = current_executable_filename();
+	std::string dir = ns_win_path_directory(cur_exe_filename);
+	return dir;
 }
 
 void rename_file_file(
