@@ -18,32 +18,30 @@ class ServupWork
 {
 public:
 	ServupWork(Address addr, size_t thread_num) :
-		m_thrd(new TCPThreaded1(addr, thread_num, std::bind(&ServupWork::virtualFrameDispatch, this, std::placeholders::_1, std::placeholders::_2))),
-		m_thread(),
-		m_thread_exc()
+		m_thrd(new TCPThreaded1(addr, thread_num, std::bind(&ServupWork::virtualFrameDispatch, this, std::placeholders::_1, std::placeholders::_2)))
 	{}
-
-	void threadFunc()
-	{
-		try {
-			m_thrd->ListenLoop();
-		}
-		catch (std::exception &) {
-			m_thread_exc = std::current_exception();
-		}
-	}
 
 	void start()
 	{
-		m_thread.reset(new std::thread(&ServupWork::threadFunc, this));
+			m_thrd->startListen();
+			m_thrd->start();
 	}
 
 	void join()
 	{
-		m_thread->join();
+		m_thrd->joinBoth();
 
-		if (m_thread_exc)
-			std::rethrow_exception(m_thread_exc);
+		try {
+			if (m_thrd->m_listen_thread_exc)
+				std::rethrow_exception(m_thrd->m_listen_thread_exc);
+			for (size_t i = 0; i < m_thrd->m_thread_exc.size(); i++)
+				if (m_thrd->m_thread_exc[i])
+					std::rethrow_exception(m_thrd->m_thread_exc[i]);
+		}
+		catch (std::exception &)
+		{
+			throw;
+		}
 	}
 
 protected:
@@ -51,8 +49,6 @@ protected:
 
 private:
 	std::unique_ptr<TCPThreaded1>    m_thrd;
-	std::unique_ptr<std::thread>  m_thread;
-	std::exception_ptr            m_thread_exc;
 };
 
 class ServupCacheHead

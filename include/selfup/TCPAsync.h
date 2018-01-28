@@ -67,27 +67,66 @@ public:
 			m_thread = std::move(std::thread(func, tcpthr, shared_from_this()));
 		}
 
+		void join()
+		{
+			m_thread.join();
+		}
+
 	public:
 		std::thread m_thread;
 		size_t      m_thread_idx;
 	};
 
 	TCPThreaded(Address addr, size_t thread_num) :
-		m_listen(tcpthreaded_socket_listen_helper(addr))
+		m_listen(tcpthreaded_socket_listen_helper(addr)),
+		m_listen_thread_exc(),
+		m_listen_thread(),
+		m_thread_exc(),
+		m_thread(),
+		m_queue_mutex(),
+		m_queue_cv(),
+		m_queue_incoming()
 	{
 		for (size_t i = 0; i < thread_num; i++)
 			m_thread_exc.push_back(std::exception_ptr());
 		for (size_t i = 0; i < thread_num; i++)
 			m_thread.push_back(std::shared_ptr<ThreadCtx>(new ThreadCtx(i)));
-		for (size_t i = 0; i < thread_num; i++)
+	}
+
+	void start()
+	{
+		for (size_t i = 0; i < m_thread.size(); i++)
 			m_thread[i]->start(&TCPThreaded::threadFunc, this);
 	}
 
-	void ListenLoop()
+	void startListen()
+	{
+		m_listen_thread = std::move(std::thread(&TCPThreaded::threadFuncListenLoop, this));
+	}
+
+	void joinBoth()
+	{
+		m_listen_thread.join();
+		for (size_t i = 0; i < m_thread.size(); i++)
+			m_thread[i]->join();
+	}
+
+protected:
+	void threadFuncListenLoop()
+	{
+		try {
+			threadFuncListenLoop2();
+		}
+		catch (std::exception &) {
+			m_listen_thread_exc = std::current_exception();
+		}
+	}
+
+	void threadFuncListenLoop2()
 	{
 		while (true) {
 			TCPSocket::unique_ptr_fd nsock(tcpthreaded_socket_accept_helper(*m_listen));
-		
+
 			{
 				std::unique_lock<std::mutex> lock(m_queue_mutex);
 				m_queue_incoming.push_back(std::move(nsock));
@@ -96,7 +135,6 @@ public:
 		}
 	}
 
-protected:
 	void threadFunc(const std::shared_ptr<ThreadCtx> &ctx)
 	{
 		try {
@@ -126,10 +164,16 @@ protected:
 
 	virtual void frameDispatch(NetworkPacket *packet, Respond *respond) = 0;
 
+public:
+	std::exception_ptr m_listen_thread_exc;
+	std::vector<std::exception_ptr> m_thread_exc;
+
 private:
 	TCPSocket::unique_ptr_fd m_listen;
-	std::vector<std::exception_ptr> m_thread_exc;
+	std::thread m_listen_thread;
+
 	std::vector<std::shared_ptr<ThreadCtx> > m_thread;
+
 	std::mutex m_queue_mutex;
 	std::condition_variable m_queue_cv;
 	std::deque<TCPSocket::unique_ptr_fd> m_queue_incoming;
