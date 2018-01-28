@@ -234,6 +234,16 @@ ns_git_oid oid_from_hexstr(const std::string &str)
 	return oid_from_raw(decode_hex(str, true));
 }
 
+ns_git_oid oid_from_ref_file(const std::string &reffilepath)
+{
+	std::string reffilecontent = ns_filesys::file_read(reffilepath);
+	if (reffilecontent.size() != NS_GIT_OID_HEXSZ + 1 || reffilecontent[NS_GIT_OID_HEXSZ] != '\n')
+		throw std::runtime_error("ref file format");
+	reffilecontent.resize(reffilecontent.size() - 1);
+	ns_git_oid commit_head_oid = oid_from_hexstr(reffilecontent);
+	return commit_head_oid;
+}
+
 ns_git_otype object_string2type(std::string s)
 {
 	for (size_t i = 0; i < sizeof ns_git_objects_table / sizeof *ns_git_objects_table; i++)
@@ -418,9 +428,7 @@ ns_git_oid latest_commit_tree_oid(
 
 	std::string reffilepath = ns_filesys::path_append_abs_rel(repopath, refname);
 
-	std::string reffilecontent = ns_filesys::file_read(reffilepath);
-
-	ns_git_oid commit_head_oid = oid_from_hexstr(reffilecontent);
+	ns_git_oid commit_head_oid = oid_from_ref_file(reffilepath);
 
 	std::string commit_head_path = memes_objpath(repopath, commit_head_oid);
 

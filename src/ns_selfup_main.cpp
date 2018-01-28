@@ -643,7 +643,7 @@ void selfup_checkout(std::string repopath, std::string refname, std::string chec
 
 void selfup_start_mainupdate_crank(Address addr)
 {
-	std::string repopath = ns_filesys::current_executable_relative_filename("clnt_repo");
+	std::string repopath = ns_filesys::current_executable_relative_filename("clnt_repo/.git");
 	std::shared_ptr<SelfupConExt2> ext(new SelfupConExt2(repopath, "refs/heads/master"));
 	std::unique_ptr<SelfupWork2> work(new SelfupWork2(addr, ext));
 	work->start();

@@ -8,7 +8,7 @@
 #include <selfup/ns_helpers.h>
 #include <selfup/TCPAsync.h>
 
-#define SERVUP_THREAD_NUM 16
+#define SERVUP_THREAD_NUM 1
 
 using namespace ns_git;
 
@@ -58,6 +58,13 @@ private:
 class ServupCacheHead
 {
 public:
+	ServupCacheHead() :
+		m_commit_tree_oid(),
+		m_trees()
+	{
+		memset(m_commit_tree_oid.id, '\0', NS_GIT_OID_RAWSZ);
+	}
+
 	ServupCacheHead(ns_git_oid commit_tree_oid, treemap_t trees) :
 		m_commit_tree_oid(commit_tree_oid),
 		m_trees(std::move(trees))
@@ -71,7 +78,10 @@ public:
 class ServupConExt2
 {
 public:
-	ServupConExt2() {};
+	ServupConExt2(const std::string &repopath) :
+		m_repopath(repopath),
+		m_cache_head(new ServupCacheHead())
+	{};
 
 	void cacheHeadRefresh(ns_git_oid wanted_oid)
 	{
@@ -176,7 +186,8 @@ private:
 
 void servup_start_crank(Address addr)
 {
-	std::shared_ptr<ServupConExt2> ext(new ServupConExt2());
+	std::string repopath = ns_filesys::current_executable_relative_filename("serv_repo/.git");
+	std::shared_ptr<ServupConExt2> ext(new ServupConExt2(repopath));
 	std::unique_ptr<ServupWork2> work(new ServupWork2(addr, SERVUP_THREAD_NUM, ext));
 	work->start();
 	work->join();
