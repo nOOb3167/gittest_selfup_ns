@@ -14,43 +14,6 @@ using namespace ns_git;
 
 typedef TCPThreaded::Respond Respond;
 
-class ServupWork
-{
-public:
-	ServupWork(Address addr, size_t thread_num) :
-		m_thrd(new TCPThreaded1(addr, thread_num, std::bind(&ServupWork::virtualFrameDispatch, this, std::placeholders::_1, std::placeholders::_2)))
-	{}
-
-	void start()
-	{
-			m_thrd->startListen();
-			m_thrd->start();
-	}
-
-	void join()
-	{
-		m_thrd->joinBoth();
-
-		try {
-			if (m_thrd->m_listen_thread_exc)
-				std::rethrow_exception(m_thrd->m_listen_thread_exc);
-			for (size_t i = 0; i < m_thrd->m_thread_exc.size(); i++)
-				if (m_thrd->m_thread_exc[i])
-					std::rethrow_exception(m_thrd->m_thread_exc[i]);
-		}
-		catch (std::exception &)
-		{
-			throw;
-		}
-	}
-
-protected:
-	virtual void virtualFrameDispatch(NetworkPacket *packet, Respond *respond) = 0;
-
-private:
-	std::unique_ptr<TCPThreaded1>    m_thrd;
-};
-
 class ServupCacheHead
 {
 public:
@@ -97,15 +60,27 @@ public:
 	std::shared_ptr<ServupCacheHead> m_cache_head;
 };
 
-class ServupWork2 : public ServupWork
+class ServupWork2
 {
 public:
 	ServupWork2(Address addr, size_t thread_num, std::shared_ptr<ServupConExt2> ext) :
-		ServupWork(addr, thread_num),
+		m_thrd(new TCPThreaded1(addr, thread_num)),
 		m_ext(ext)
 	{}
 
-	void virtualFrameDispatch(NetworkPacket *packet, Respond *respond) override
+	void start()
+	{
+		m_thrd->setFrameDispatch(std::bind(&ServupWork2::virtualFrameDispatch, this, std::placeholders::_1, std::placeholders::_2));
+		m_thrd->startListen();
+		m_thrd->start();
+	}
+
+	void join()
+	{
+		m_thrd->joinBoth();
+	}
+
+	void virtualFrameDispatch(NetworkPacket *packet, Respond *respond)
 	{
 		uint8_t id;
 
@@ -177,6 +152,7 @@ public:
 	}
 
 private:
+	std::unique_ptr<TCPThreaded1>  m_thrd;
 	std::shared_ptr<ServupConExt2> m_ext;
 };
 

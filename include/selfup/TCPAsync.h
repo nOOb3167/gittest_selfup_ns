@@ -109,6 +109,12 @@ public:
 		m_listen_thread.join();
 		for (size_t i = 0; i < m_thread.size(); i++)
 			m_thread[i]->join();
+
+		if (m_listen_thread_exc)
+			std::rethrow_exception(m_listen_thread_exc);
+		for (size_t i = 0; i < m_thread_exc.size(); i++)
+			if (m_thread_exc[i])
+				std::rethrow_exception(m_thread_exc[i]);
 	}
 
 protected:
@@ -164,14 +170,12 @@ protected:
 
 	virtual void frameDispatch(NetworkPacket *packet, Respond *respond) = 0;
 
-public:
-	std::exception_ptr m_listen_thread_exc;
-	std::vector<std::exception_ptr> m_thread_exc;
-
 private:
 	TCPSocket::unique_ptr_fd m_listen;
+	std::exception_ptr m_listen_thread_exc;
 	std::thread m_listen_thread;
 
+	std::vector<std::exception_ptr> m_thread_exc;
 	std::vector<std::shared_ptr<ThreadCtx> > m_thread;
 
 	std::mutex m_queue_mutex;
@@ -184,10 +188,15 @@ class TCPThreaded1 : public TCPThreaded
 public:
 	typedef ::std::function<void(NetworkPacket *packet, Respond *respond)> function_framedispatch_t;
 
-	TCPThreaded1(Address addr, size_t thread_num, function_framedispatch_t framedispatch) :
+	TCPThreaded1(Address addr, size_t thread_num) :
 		TCPThreaded(addr, thread_num),
-		m_framedispatch(framedispatch)
+		m_framedispatch()
 	{}
+
+	void setFrameDispatch(const function_framedispatch_t &framedispatch)
+	{
+		m_framedispatch = framedispatch;
+	}
 
 protected:
 	void frameDispatch(NetworkPacket *packet, Respond *respond) override
