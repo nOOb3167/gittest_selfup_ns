@@ -71,8 +71,7 @@ public:
 	void start()
 	{
 		m_thrd->setFrameDispatch(std::bind(&ServupWork2::frameDispatch, this, std::placeholders::_1, std::placeholders::_2));
-		m_thrd->startListen();
-		m_thrd->start();
+		m_thrd->startBoth();
 	}
 
 	void join()

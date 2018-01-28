@@ -54,23 +54,13 @@ public:
 		int m_fd;
 	};
 
-	class ThreadCtx : public std::enable_shared_from_this<ThreadCtx>
+	class ThreadCtx
 	{
 	public:
 		ThreadCtx(size_t thread_idx) :
 			m_thread(),
 			m_thread_idx(thread_idx)
 		{}
-
-		void start(const std::function<void(TCPThreaded *, const std::shared_ptr<ThreadCtx> &)> &func, TCPThreaded *tcpthr)
-		{
-			m_thread = std::move(std::thread(func, tcpthr, shared_from_this()));
-		}
-
-		void join()
-		{
-			m_thread.join();
-		}
 
 	public:
 		std::thread m_thread;
@@ -101,22 +91,18 @@ public:
 		m_framedispatch = framedispatch;
 	}
 
-	void start()
-	{
-		for (size_t i = 0; i < m_thread.size(); i++)
-			m_thread[i]->start(&TCPThreaded::threadFunc, this);
-	}
-
-	void startListen()
+	void startBoth()
 	{
 		m_listen_thread = std::move(std::thread(&TCPThreaded::threadFuncListenLoop, this));
+		for (size_t i = 0; i < m_thread.size(); i++)
+			m_thread[i]->m_thread = std::move(std::thread(&TCPThreaded::threadFunc, this, m_thread[i]));
 	}
 
 	void joinBoth()
 	{
 		m_listen_thread.join();
 		for (size_t i = 0; i < m_thread.size(); i++)
-			m_thread[i]->join();
+			m_thread[i]->m_thread.join();
 
 		if (m_listen_thread_exc)
 			std::rethrow_exception(m_listen_thread_exc);
