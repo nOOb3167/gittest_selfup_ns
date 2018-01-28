@@ -221,8 +221,8 @@ protected:
 			if (buf.size() < buf_off + wait_for)
 				buf.resize(buf_off + wait_for);
 
-			if (-1 == (rcvt = m_sock->ReceiveWaiting(((uint8_t *) buf.data()) + buf_off, wait_for, deadline - timestamp)))
-				throw std::runtime_error("waitFrame time");
+			if (-1 == (rcvt = m_sock->ReceiveWaiting(((uint8_t *) buf.data()) + buf_off, wait_for, GS_MIN(deadline - timestamp, INT_MAX))))
+				throw std::runtime_error("waitFrame recv");
 			buf_off += rcvt;
 
 			timestamp = selfup_timestamp();
@@ -252,7 +252,7 @@ public:
 		try {
 			virtualThreadFunc();
 		}
-		catch (std::exception &) {
+		catch (std::exception &e) {
 			m_thread_exc = std::current_exception();
 		}
 	}
@@ -555,7 +555,7 @@ public:
 					throw std::runtime_error("inflate");
 				if (inflated_type == GIT_OBJ_BAD)
 					throw std::runtime_error("inflate type");
-				assert(inflated.size == inflated_size);
+				assert(inflated_offset + inflated_size == inflated.size);
 				// FIXME: compute and check hash before writing?
 				//        see git_odb_hash
 				git_oid written_oid = {};

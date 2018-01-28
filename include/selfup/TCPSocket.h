@@ -141,6 +141,9 @@ public:
 		FD_ZERO(&readset);
 		FD_SET(*m_handle, &readset);
 
+		if (timeout_ms == INT_MAX)
+			timeout_ms /= 1000;
+
 		struct timeval tv = {};
 		tv.tv_sec  = 0;
 		tv.tv_usec = timeout_ms * 1000;
