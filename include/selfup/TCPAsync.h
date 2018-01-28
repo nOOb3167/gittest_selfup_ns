@@ -77,7 +77,10 @@ public:
 		size_t      m_thread_idx;
 	};
 
+	typedef ::std::function<void(NetworkPacket *packet, Respond *respond)> function_framedispatch_t;
+
 	TCPThreaded(Address addr, size_t thread_num) :
+		m_framedispatch(),
 		m_listen(tcpthreaded_socket_listen_helper(addr)),
 		m_listen_thread_exc(),
 		m_listen_thread(),
@@ -91,6 +94,11 @@ public:
 			m_thread_exc.push_back(std::exception_ptr());
 		for (size_t i = 0; i < thread_num; i++)
 			m_thread.push_back(std::shared_ptr<ThreadCtx>(new ThreadCtx(i)));
+	}
+
+	void setFrameDispatch(const function_framedispatch_t &framedispatch)
+	{
+		m_framedispatch = framedispatch;
 	}
 
 	void start()
@@ -163,14 +171,14 @@ protected:
 			while (true) {
 				NetworkPacket packet(tcpthreaded_blocking_read_helper(*fd));
 				Respond respond(*fd);
-				frameDispatch(&packet, &respond);
+				m_framedispatch(&packet, &respond);
 			}
 		}
 	}
 
-	virtual void frameDispatch(NetworkPacket *packet, Respond *respond) = 0;
-
 private:
+	function_framedispatch_t m_framedispatch;
+
 	TCPSocket::unique_ptr_fd m_listen;
 	std::exception_ptr m_listen_thread_exc;
 	std::thread m_listen_thread;
@@ -181,31 +189,6 @@ private:
 	std::mutex m_queue_mutex;
 	std::condition_variable m_queue_cv;
 	std::deque<TCPSocket::unique_ptr_fd> m_queue_incoming;
-};
-
-class TCPThreaded1 : public TCPThreaded
-{
-public:
-	typedef ::std::function<void(NetworkPacket *packet, Respond *respond)> function_framedispatch_t;
-
-	TCPThreaded1(Address addr, size_t thread_num) :
-		TCPThreaded(addr, thread_num),
-		m_framedispatch()
-	{}
-
-	void setFrameDispatch(const function_framedispatch_t &framedispatch)
-	{
-		m_framedispatch = framedispatch;
-	}
-
-protected:
-	void frameDispatch(NetworkPacket *packet, Respond *respond) override
-	{
-		m_framedispatch(packet, respond);
-	}
-
-private:
-	function_framedispatch_t m_framedispatch;
 };
 
 TCPSocket::unique_ptr_fd tcpthreaded_socket_listen_helper(Address addr)

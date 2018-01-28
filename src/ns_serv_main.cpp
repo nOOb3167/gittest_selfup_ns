@@ -64,13 +64,13 @@ class ServupWork2
 {
 public:
 	ServupWork2(Address addr, size_t thread_num, std::shared_ptr<ServupConExt2> ext) :
-		m_thrd(new TCPThreaded1(addr, thread_num)),
+		m_thrd(new TCPThreaded(addr, thread_num)),
 		m_ext(ext)
 	{}
 
 	void start()
 	{
-		m_thrd->setFrameDispatch(std::bind(&ServupWork2::virtualFrameDispatch, this, std::placeholders::_1, std::placeholders::_2));
+		m_thrd->setFrameDispatch(std::bind(&ServupWork2::frameDispatch, this, std::placeholders::_1, std::placeholders::_2));
 		m_thrd->startListen();
 		m_thrd->start();
 	}
@@ -80,7 +80,7 @@ public:
 		m_thrd->joinBoth();
 	}
 
-	void virtualFrameDispatch(NetworkPacket *packet, Respond *respond)
+	void frameDispatch(NetworkPacket *packet, Respond *respond)
 	{
 		uint8_t id;
 
@@ -152,7 +152,7 @@ public:
 	}
 
 private:
-	std::unique_ptr<TCPThreaded1>  m_thrd;
+	std::unique_ptr<TCPThreaded>  m_thrd;
 	std::shared_ptr<ServupConExt2> m_ext;
 };
 
