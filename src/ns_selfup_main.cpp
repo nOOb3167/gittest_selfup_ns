@@ -1,4 +1,5 @@
 #include <cassert>
+#include <climits>
 #include <cstdlib>
 #include <cstring>
 #include <deque>
@@ -30,6 +31,8 @@ typedef ::std::unique_ptr<git_blob, void(*)(git_blob *)> unique_ptr_gitblob;
 typedef ::std::unique_ptr<git_commit, void(*)(git_commit *)> unique_ptr_gitcommit;
 typedef ::std::unique_ptr<git_tree, void(*)(git_tree *)> unique_ptr_gittree;
 typedef ::std::unique_ptr<git_odb, void(*)(git_odb *)> unique_ptr_gitodb;
+
+int selfup_disable_timeout = 1;
 
 void deleteGitrepository(git_repository *p)
 {
@@ -186,7 +189,7 @@ protected:
 	NetworkPacket virtualWaitFrame() override
 	{
 		long long timestamp = selfup_timestamp();
-		const long long deadline = timestamp + SELFUP_LONG_TIMEOUT_MS;
+		const long long deadline = selfup_disable_timeout ? LLONG_MAX : timestamp + SELFUP_LONG_TIMEOUT_MS;
 		long long buf_off = 0;
 		std::string buf;
 		int rcvt = 0;
@@ -269,7 +272,7 @@ public:
 			try {
 				std::rethrow_exception(m_thread_exc);
 			}
-			catch (std::exception &) {
+			catch (std::exception &e) {
 				throw;
 			}
 		}

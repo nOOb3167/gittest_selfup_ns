@@ -305,7 +305,7 @@ void memes_tree(
 	if (spc == std::string::npos)
 		throw std::runtime_error("tree spc");
 
-	unsigned long long mode = memes_parse_mode(inflated.substr(offset, offset - spc));
+	unsigned long long mode = memes_parse_mode(inflated.substr(offset, spc - offset));
 
 	if (mode != NS_GIT_FILEMODE_TREE &&
 		mode != NS_GIT_FILEMODE_BLOB &&

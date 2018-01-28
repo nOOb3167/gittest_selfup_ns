@@ -104,11 +104,16 @@ public:
 		for (size_t i = 0; i < m_thread.size(); i++)
 			m_thread[i]->m_thread.join();
 
-		if (m_listen_thread_exc)
-			std::rethrow_exception(m_listen_thread_exc);
-		for (size_t i = 0; i < m_thread_exc.size(); i++)
-			if (m_thread_exc[i])
-				std::rethrow_exception(m_thread_exc[i]);
+		try {
+			if (m_listen_thread_exc)
+				std::rethrow_exception(m_listen_thread_exc);
+			for (size_t i = 0; i < m_thread_exc.size(); i++)
+				if (m_thread_exc[i])
+					std::rethrow_exception(m_thread_exc[i]);
+		}
+		catch (std::exception &e) {
+			throw;
+		}
 	}
 
 protected:
