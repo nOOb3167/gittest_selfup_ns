@@ -448,19 +448,7 @@ public:
 
 		/* determine local version git_oid - defaults to zeroed-out */
 
-		git_oid repo_head_tree_oid = {};
-		try {
-			git_oid repo_head_commit_oid = {};
-			if (!! git_reference_name_to_id(&repo_head_commit_oid, repo.get(), m_ext->m_refname.c_str()))
-				throw std::runtime_error("refname id");
-			unique_ptr_gitcommit commit_head(selfup_git_commit_lookup(repo.get(), &repo_head_commit_oid), deleteGitcommit);
-			unique_ptr_gittree   commit_tree(selfup_git_commit_tree(commit_head.get()), deleteGittree);
-			git_oid_cpy(&repo_head_tree_oid, git_tree_id(commit_tree.get()));
-		}
-		catch (std::exception &) {
-			// FIXME: handle only GIT_ENOTFOUND / missing case here
-			git_oid_cpy(&repo_head_tree_oid, &oid_zero);
-		}
+		git_oid repo_head_tree_oid = getHeadTree(repo.get(), m_ext->m_refname);
 
 		/* matching versions suggest an update is unnecessary */
 
@@ -543,6 +531,27 @@ public:
 
 		git_oid new_commit_oid = writeCommitDummy(repo.get(), res_latest_oid);
 		unique_ptr_gitreference new_ref(selfup_git_reference_create_and_force_set(repo.get(), m_ext->m_refname, new_commit_oid), deleteGitreference);
+	}
+
+	git_oid getHeadTree(git_repository *repo, const std::string &refname)
+	{
+		git_oid oid_zero = {};
+		git_oid repo_head_commit_oid = {};
+		git_oid repo_head_tree_oid = {};
+		
+		int err = git_reference_name_to_id(&repo_head_commit_oid, repo, refname.c_str());
+		if (!!err && err != GIT_ENOTFOUND)
+			throw std::runtime_error("refname id");
+		
+		if (err == GIT_ENOTFOUND) {
+			git_oid_cpy(&repo_head_tree_oid, &oid_zero);
+		}
+		else {
+			unique_ptr_gitcommit commit_head(selfup_git_commit_lookup(repo, &repo_head_commit_oid), deleteGitcommit);
+			unique_ptr_gittree   commit_tree(selfup_git_commit_tree(commit_head.get()), deleteGittree);
+			git_oid_cpy(&repo_head_tree_oid, git_tree_id(commit_tree.get()));
+		}
+		return repo_head_tree_oid;
 	}
 
 	git_oid writeCommitDummy(git_repository *repo, git_oid tree_oid)
