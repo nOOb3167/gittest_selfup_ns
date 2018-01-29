@@ -145,7 +145,7 @@ protected:
 		try {
 			threadFunc2(ctx);
 		}
-		catch (std::exception &) {
+		catch (std::exception &e) {
 			m_thread_exc.at(ctx->m_thread_idx) = std::current_exception();
 		}
 	}
