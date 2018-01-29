@@ -555,7 +555,8 @@ public:
 					throw std::runtime_error("inflate");
 				if (inflated_type == GIT_OBJ_BAD)
 					throw std::runtime_error("inflate type");
-				assert(inflated_offset + inflated_size == inflated.size);
+				// FIXME: legacy memes_inflate (as opposed to ns_git::read_object) appends trailing zero so -1
+				assert(inflated_offset + inflated_size == inflated.size - 1);
 				// FIXME: compute and check hash before writing?
 				//        see git_odb_hash
 				git_oid written_oid = {};
