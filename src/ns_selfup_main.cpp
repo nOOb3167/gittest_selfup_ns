@@ -31,6 +31,8 @@ typedef ::std::unique_ptr<git_blob, void(*)(git_blob *)> unique_ptr_gitblob;
 typedef ::std::unique_ptr<git_commit, void(*)(git_commit *)> unique_ptr_gitcommit;
 typedef ::std::unique_ptr<git_tree, void(*)(git_tree *)> unique_ptr_gittree;
 typedef ::std::unique_ptr<git_odb, void(*)(git_odb *)> unique_ptr_gitodb;
+typedef ::std::unique_ptr<git_signature, void(*)(git_signature *)> unique_ptr_gitsignature;
+typedef ::std::unique_ptr<git_reference, void(*)(git_reference *)> unique_ptr_gitreference;
 
 int selfup_disable_timeout = 1;
 
@@ -58,6 +60,16 @@ void deleteGitodb(git_odb *p)
 {
 	if (p)
 		git_odb_free(p);
+}
+void deleteGitsignature(git_signature *p)
+{
+	if (p)
+		git_signature_free(p);
+}
+void deleteGitreference(git_reference *p)
+{
+	if (p)
+		git_reference_free(p);
 }
 git_repository * selfup_git_repository_new()
 {
@@ -99,6 +111,22 @@ git_repository * selfup_git_memory_repository_new()
 		throw std::runtime_error("backend");
 
 	return repository_memory.release();
+}
+
+git_signature * selfup_git_signature_new_dummy()
+{
+	git_signature *sig = NULL;
+	if (!! git_signature_new(&sig, "DummyName", "DummyEMail", 0, 0))
+		throw std::runtime_error("signature");
+	return sig;
+}
+
+git_reference * selfup_git_reference_create_and_force_set(git_repository *repo, const std::string &refname, git_oid commit_oid)
+{
+	git_reference *ref = NULL;
+	if (!! git_reference_create(&ref, repo, refname.c_str(), &commit_oid, true, "DummyLogMessage"))
+		throw std::runtime_error("reference");
+	return ref;
 }
 
 git_blob * selfup_git_blob_lookup(git_repository *repository, git_oid *oid)
@@ -512,6 +540,36 @@ public:
 
 		/* required trees were confirmed present above and required blobs are present within the repository.
 		   supposedly we have correctly received a full update. */
+
+		git_oid new_commit_oid = writeCommitDummy(repo.get(), res_latest_oid);
+		unique_ptr_gitreference new_ref(selfup_git_reference_create_and_force_set(repo.get(), m_ext->m_refname, new_commit_oid), deleteGitreference);
+	}
+
+	git_oid writeCommitDummy(git_repository *repo, git_oid tree_oid)
+	{
+		unique_ptr_gitodb odb(selfup_git_repository_odb(repo), deleteGitodb);
+		unique_ptr_gittree tree(selfup_git_tree_lookup(repo, &tree_oid), deleteGittree);
+		unique_ptr_gitsignature sig(selfup_git_signature_new_dummy(), deleteGitsignature);
+
+		git_buf buf = {};
+		git_oid commit_oid_pre = {};
+		git_oid commit_oid = {};
+
+		if (!! git_commit_create_buffer(&buf, repo, sig.get(), sig.get(), "UTF-8", "Dummy", tree.get(), 0, NULL))
+			throw std::runtime_error("git commit create buffer");
+
+		if (!! git_odb_hash(&commit_oid_pre, buf.ptr, buf.size, GIT_OBJ_COMMIT))
+			throw std::runtime_error("git odb hash");
+
+		if (git_odb_exists(odb.get(), &commit_oid_pre))
+			return commit_oid_pre;
+
+		if (!! git_odb_write(&commit_oid, odb.get(), buf.ptr, buf.size, GIT_OBJ_COMMIT))
+			throw std::runtime_error("git odb write");
+
+		assert(git_oid_cmp(&commit_oid_pre, &commit_oid) == 0);
+
+		return commit_oid;
 	}
 
 	/* @missing_obj_oids: will be popped as objects are received - empties completely on success */

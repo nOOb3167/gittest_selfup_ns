@@ -252,6 +252,26 @@ ns_git_otype object_string2type(std::string s)
 	return NS_GIT_OBJ_BAD;
 }
 
+std::string commit_create_buffer(
+	ns_git_oid tree, ns_git_oid parent,
+	const std::string &name, const std::string &email, const std::string &message)
+{
+	/* see functions commit_tree_extended in git */
+
+	std::string buf;
+
+	buf.reserve(8192);
+
+	buf.append("tree "); buf.append(encode_hex(std::string((char *) tree.id, NS_GIT_OID_RAWSZ), true)); buf.append(1, '\n');
+	buf.append("parent "); buf.append(encode_hex(std::string((char *) parent.id, NS_GIT_OID_RAWSZ), true)); buf.append(1, '\n');
+	buf.append("author ")   ; buf.append(name); buf.append(" <"); buf.append(email); buf.append("> "); buf.append("0000000000 +0100");
+	buf.append("committer "); buf.append(name); buf.append(" <"); buf.append(email); buf.append("> "); buf.append("0000000000 +0100");
+	buf.append("\n");
+	buf.append(message);
+
+	return buf;
+}
+
 std::string memes_objpath(
 	const std::string &repopath,
 	ns_git_oid oid)
