@@ -159,10 +159,15 @@ protected:
 			m_queue_incoming.pop_front();
 			lock.unlock();
 
-			while (true) {
-				NetworkPacket packet(tcpthreaded_blocking_read_helper(*fd));
-				Respond respond(*fd);
-				m_framedispatch(&packet, &respond);
+			try {
+				while (true) {
+					NetworkPacket packet(tcpthreaded_blocking_read_helper(*fd));
+					Respond respond(*fd);
+					m_framedispatch(&packet, &respond);
+				}
+			}
+			catch (std::runtime_error &e) {
+				/* disconnect - resume dequeuing incoming connections */
 			}
 		}
 	}
