@@ -88,6 +88,60 @@ struct oid_comparator_t {
 typedef ::std::map<ns_git_oid, NsGitObject, oid_comparator_t> treemap_t;
 typedef ::std::set<ns_git_oid, oid_comparator_t> treeset_t;
 
+std::string inflatebuf(const std::string &buf);
+
+char decode_hex_char(const char hex_char);
+std::string decode_hex(const std::string &hex, bool web_programmer_designed_swapped_hex_mental_illness);
+std::string encode_hex(const std::string &bin, bool web_programmer_designed_swapped_hex_mental_illness);
+
+bool oid_equals(const ns_git_oid &a, const ns_git_oid &b);
+ns_git_oid oid_from_raw(const std::string &raw);
+ns_git_oid oid_from_hexstr(const std::string &str);
+ns_git_oid oid_from_ref_file(const std::string &reffilepath);
+
+ns_git_otype object_string2type(std::string s);
+std::string commit_create_buffer(
+	ns_git_oid tree, ns_git_oid parent,
+	const std::string &name, const std::string &email, const std::string &message);
+std::string memes_objpath(
+	const std::string &repopath,
+	ns_git_oid oid);
+unsigned long long memes_parse_mode(const std::string &buf);
+void memes_tree(
+	const std::string &inflated,
+	size_t inflated_offset,
+	size_t *inout_parse_offset,
+	unsigned long long *out_mode,
+	std::string *out_filename,
+	ns_git_oid *out_sha1);
+void memes_get_object_header(
+	const std::string &data,
+	ns_git_otype *out_type, size_t *out_data_offset, size_t *out_data_size);
+ns_git_oid memes_commit_tree(
+	const std::string &buf);
+
+ns_git_oid latest_commit_tree_oid(
+	const std::string &repopath,
+	const std::string &refname);
+ns_git_oid latest_selfupdate_blob_oid(
+	const std::string &repopath,
+	const std::string &refname,
+	const std::string &blob_filename);
+
+NsGitObject read_object(
+	const std::string &repopath,
+	ns_git_oid oid,
+	bool also_fill_out_deflated);
+
+void treelist_visit(const std::string &repopath, treemap_t *treemap, treeset_t *markset, NsGitObject tree);
+treemap_t treelist_recursive(
+	const std::string &repopath,
+	ns_git_oid tree_oid);
+}
+
+namespace ns_git
+{
+
 std::string inflatebuf(const std::string &buf)
 {
 	/* https://www.zlib.net/zpipe.c
