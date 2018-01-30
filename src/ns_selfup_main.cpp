@@ -306,6 +306,20 @@ public:
 		}
 	}
 
+	void readEnsureCmd(NetworkPacket *packet, uint8_t cmdid)
+	{
+		if (cmdid != readGetCmd(packet))
+			throw ProtocolExc("cmd");
+	}
+
+	uint8_t readGetCmd(NetworkPacket *packet)
+	{
+		assert(packet->isReset());
+		uint8_t c;
+		(*packet) >> c;
+		return c;
+	}
+
 protected:
 	std::shared_ptr<TCPSocket>     m_sock;
 	std::unique_ptr<SelfupRespond> m_respond;
@@ -363,22 +377,9 @@ public:
 		if (git_oid_cmp(&oid_cur_exe, &res_latest_oid) == 0)
 			return;
 
-		NetworkPacket req_blob_pkt(SELFUP_CMD_REQUEST_BLOB_SELFUPDATE, networkpacket_cmd_tag_t());
-		req_blob_pkt.outSizedStr((char *) res_latest_oid.id, GIT_OID_RAWSZ);
-		m_respond->respondOneshot(std::move(req_blob_pkt));
+		requestAndRecvAndWriteObj(memory_repository.get(), res_latest_oid);
 
-		NetworkPacket res_blob_pkt = m_respond->waitFrame();
-		readEnsureCmd(&res_blob_pkt, SELFUP_CMD_RESPONSE_BLOB_SELFUPDATE);
-		uint32_t res_blob_blen = 0;
-		res_blob_pkt >> res_blob_blen;
-		git_oid res_blob_oid = {};
-		if (!! git_blob_create_frombuffer(&res_blob_oid, memory_repository.get(), res_blob_pkt.inSizedStr(res_blob_blen), res_blob_blen))
-			throw std::runtime_error("blob");
-		/* wtf? was the wrong blob sent? */
-		if (git_oid_cmp(&res_blob_oid, &res_latest_oid) != 0)
-			throw std::runtime_error("blob2");
-
-		unique_ptr_gitblob blob(selfup_git_blob_lookup(memory_repository.get(), &res_blob_oid), deleteGitblob);
+		unique_ptr_gitblob blob(selfup_git_blob_lookup(memory_repository.get(), &res_latest_oid), deleteGitblob);
 
 		std::unique_ptr<std::string> update_buffer(new std::string((char *) git_blob_rawcontent(blob.get()), git_blob_rawsize(blob.get())));
 
@@ -387,13 +388,43 @@ public:
 		return;
 	}
 
-	void readEnsureCmd(NetworkPacket *packet, uint8_t cmdid)
+	void requestAndRecvAndWriteObj(git_repository *memory_repository, git_oid missing_obj_oid)
 	{
-		assert(packet->isReset());
-		uint8_t c;
-		(*packet) >> c;
-		if (c != cmdid)
-			throw ProtocolExc("cmd");
+		/* REQ_OBJS3 */
+
+		NetworkPacket req_obj_pkt(SELFUP_CMD_REQUEST_OBJS3, networkpacket_cmd_tag_t());
+		req_obj_pkt << (uint32_t) 1;
+		req_obj_pkt.outSizedStr((char *) missing_obj_oid.id, GIT_OID_RAWSZ);
+		m_respond->respondOneshot(std::move(req_obj_pkt));
+
+		/* RES_OBJS3 */
+
+		NetworkPacket res_obj_pkt = m_respond->waitFrame();
+		readEnsureCmd(&res_obj_pkt, SELFUP_CMD_RESPONSE_OBJS3);
+		uint32_t res_obj_blen = 0;
+		res_obj_pkt >> res_obj_blen;
+
+		git_buf inflated = {};
+		git_otype inflated_type = GIT_OBJ_BAD;
+		size_t inflated_offset = 0;
+		size_t inflated_size = 0;
+		if (!! git_memes_inflate(res_obj_pkt.inSizedStr(res_obj_blen), res_obj_blen, &inflated, &inflated_type, &inflated_offset, &inflated_size))
+			throw std::runtime_error("inflate");
+		if (inflated_type != GIT_OBJ_BLOB)
+			throw std::runtime_error("inflate type");
+		// FIXME: legacy memes_inflate (as opposed to ns_git::read_object) appends trailing zero so -1
+		assert(inflated_offset + inflated_size == inflated.size - 1);
+
+		git_oid written_oid = {};
+		if (!! git_blob_create_frombuffer(&written_oid, memory_repository, inflated.ptr + inflated_offset, inflated_size))
+			throw std::runtime_error("blob create from buffer");
+		if (git_oid_cmp(&written_oid, &missing_obj_oid) != 0)
+			throw std::runtime_error("blob mismatch");
+
+		/* RES_OBJS3_DONE */
+
+		NetworkPacket res_obj_done_pkt = m_respond->waitFrame();
+		readEnsureCmd(&res_obj_done_pkt, SELFUP_CMD_RESPONSE_OBJS3_DONE);
 	}
 
 private:
@@ -639,20 +670,6 @@ public:
 			}
 		}
 		return received_blob_oids;
-	}
-
-	void readEnsureCmd(NetworkPacket *packet, uint8_t cmdid)
-	{
-		if (cmdid != readGetCmd(packet))
-			throw ProtocolExc("cmd");
-	}
-
-	uint8_t readGetCmd(NetworkPacket *packet)
-	{
-		assert(packet->isReset());
-		uint8_t c;
-		(*packet) >> c;
-		return c;
 	}
 
 private:

@@ -469,6 +469,27 @@ ns_git_oid latest_commit_tree_oid(
 	return tree_head_oid;
 }
 
+ns_git_oid latest_selfupdate_blob_oid(
+	const std::string &repopath,
+	const std::string &refname,
+	const std::string &blob_filename)
+{
+	ns_git_oid tree_oid = latest_commit_tree_oid(repopath, refname);
+	NsGitObject tree_obj = read_object(repopath, tree_oid, false);
+
+	size_t             parse_offset = 0;
+	unsigned long long mode = 0;
+	std::string        filename;
+	ns_git_oid         objoid = {};
+	do {
+		memes_tree(tree_obj.m_inflated, tree_obj.m_inflated_offset, &parse_offset, &mode, &filename, &objoid);
+		if (filename == blob_filename)
+			return objoid;
+	} while (parse_offset != -1);
+
+	throw std::runtime_error("selfupdate tree missing entry blob_filename");
+}
+
 NsGitObject read_object(
 	const std::string &repopath,
 	ns_git_oid oid,
