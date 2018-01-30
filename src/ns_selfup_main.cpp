@@ -179,6 +179,8 @@ long long selfup_timestamp()
 class SelfupRespond
 {
 public:
+	virtual ~SelfupRespond() = default;
+
 	void respondOneshot(NetworkPacket packet)
 	{
 		virtualRespond(std::move(packet));
@@ -275,6 +277,8 @@ public:
 	{
 		m_sock->Connect(addr);
 	}
+
+	virtual ~SelfupWork() = default;
 
 	void threadFunc()
 	{
@@ -751,6 +755,7 @@ void selfup_start_crank(Address addr)
 	std::string cur_exe_filename = ns_filesys::current_executable_filename();
 	std::shared_ptr<SelfupConExt1> ext(new SelfupConExt1(cur_exe_filename, "refs/heads/selfup"));
 	std::unique_ptr<SelfupWork1> work(new SelfupWork1(addr, ext));
+
 	work->start();
 	work->join();
 
@@ -782,7 +787,7 @@ int main(int argc, char **argv)
 
 	tcpsocket_startup_helper();
 	selfup_start_crank(Address(AF_INET, 6757, 0x7F000001, address_ipv4_tag_t()));
-	//selfup_start_mainupdate_crank(Address(AF_INET, 6757, 0x7F000001, address_ipv4_tag_t()));
+	selfup_start_mainupdate_crank(Address(AF_INET, 6757, 0x7F000001, address_ipv4_tag_t()));
 
 	return EXIT_SUCCESS;
 }
