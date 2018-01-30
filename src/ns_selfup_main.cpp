@@ -34,7 +34,8 @@ typedef ::std::unique_ptr<git_odb, void(*)(git_odb *)> unique_ptr_gitodb;
 typedef ::std::unique_ptr<git_signature, void(*)(git_signature *)> unique_ptr_gitsignature;
 typedef ::std::unique_ptr<git_reference, void(*)(git_reference *)> unique_ptr_gitreference;
 
-int selfup_disable_timeout = 1;
+int g_selfup_disable_timeout = 1;
+int g_selfup_selfupdate_skip_fileops = 1;
 
 void deleteGitrepository(git_repository *p)
 {
@@ -217,7 +218,7 @@ protected:
 	NetworkPacket virtualWaitFrame() override
 	{
 		long long timestamp = selfup_timestamp();
-		const long long deadline = selfup_disable_timeout ? LLONG_MAX : timestamp + SELFUP_LONG_TIMEOUT_MS;
+		const long long deadline = g_selfup_disable_timeout ? LLONG_MAX : timestamp + SELFUP_LONG_TIMEOUT_MS;
 		long long buf_off = 0;
 		std::string buf;
 		int rcvt = 0;
@@ -691,7 +692,7 @@ void selfup_dryrun(std::string exe_filename)
 	int ret = system(command.c_str());
 
 	if (ret != SELFUP_ARG_VERSUB_SUCCESS_CODE)
-		throw std::runtime_error("");
+		throw std::runtime_error("dryrun retcode");
 }
 
 void selfup_reexec_probably_blocking(std::string exe_filename)
@@ -763,6 +764,9 @@ void selfup_start_crank(Address addr)
 
 	ns_filesys::file_write_frombuffer(temp_filename, ext->m_update_buffer->data(), ext->m_update_buffer->size());
 
+	if (g_selfup_selfupdate_skip_fileops)
+		return;
+
 	selfup_dryrun(temp_filename);
 
 	ns_filesys::rename_file_file(cur_exe_filename, old_filename);
@@ -777,8 +781,8 @@ int main(int argc, char **argv)
 		throw std::runtime_error("libgit2 init");
 
 	tcpsocket_startup_helper();
-	//selfup_start_crank(Address(AF_INET, 6757, 0x7F000001, address_ipv4_tag_t()));
-	selfup_start_mainupdate_crank(Address(AF_INET, 6757, 0x7F000001, address_ipv4_tag_t()));
+	selfup_start_crank(Address(AF_INET, 6757, 0x7F000001, address_ipv4_tag_t()));
+	//selfup_start_mainupdate_crank(Address(AF_INET, 6757, 0x7F000001, address_ipv4_tag_t()));
 
 	return EXIT_SUCCESS;
 }
