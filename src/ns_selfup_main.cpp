@@ -738,16 +738,52 @@ void selfup_checkout(std::string repopath, std::string refname, std::string chec
 		throw std::runtime_error("checkout tree");
 }
 
+unique_ptr_gitrepository selfup_ensure_repository(const std::string &repopath, const std::string &sanity_check_lump)
+{
+	if (repopath.substr(repopath.size() - sanity_check_lump.size()) != sanity_check_lump)
+		throw std::runtime_error("ensure repository sanity check");
+
+	git_repository *repo = NULL;
+	git_repository_init_options init_options = GIT_REPOSITORY_INIT_OPTIONS_INIT;
+	assert(init_options.version == 1 && GIT_REPOSITORY_INIT_OPTIONS_VERSION == 1);
+	/* MKPATH for whole path creation (MKDIR only the last component) */
+	/* BARE could be used (ex no dotgit dir) */
+	init_options.flags = GIT_REPOSITORY_INIT_NO_REINIT | GIT_REPOSITORY_INIT_MKDIR;
+	init_options.mode = GIT_REPOSITORY_INIT_SHARED_UMASK;
+	init_options.workdir_path = NULL;
+	init_options.description = NULL;
+	init_options.template_path = NULL;
+	init_options.initial_head = NULL;
+	init_options.origin_url = NULL;
+
+	int err = git_repository_init_ext(&repo, repopath.c_str(), &init_options);
+	if (!!err && err == GIT_EEXISTS) {
+		assert(!repo);
+		return unique_ptr_gitrepository(selfup_git_repository_open(repopath.c_str()), deleteGitrepository);
+	}
+	if (!!err)
+		throw std::runtime_error("ensure repository init");
+
+	return unique_ptr_gitrepository(repo, deleteGitrepository);
+}
+
 void selfup_start_mainupdate_crank(Address addr)
 {
 	std::string repopath = ns_filesys::current_executable_relative_filename("clnt_repo/.git");
-	std::shared_ptr<SelfupConExt2> ext(new SelfupConExt2(repopath, "refs/heads/master"));
+	std::string refname = "refs/heads/master";
+	std::string checkoutpath = ns_filesys::current_executable_relative_filename("clnt_chkout");
+	selfup_ensure_repository(repopath, ".git");
+	std::shared_ptr<SelfupConExt2> ext(new SelfupConExt2(repopath, refname));
 	std::unique_ptr<SelfupWork2> work(new SelfupWork2(addr, ext));
 	work->start();
 	work->join();
 
 	if (! ext->m_update_have)
 		return;
+
+	if (0) {
+		selfup_checkout(repopath, refname, checkoutpath);
+	}
 }
 
 void selfup_start_crank(Address addr)
