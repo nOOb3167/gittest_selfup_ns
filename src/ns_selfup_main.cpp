@@ -330,8 +330,9 @@ protected:
 class SelfupConExt1
 {
 public:
-	SelfupConExt1(const std::string &cur_exe_filename) :
+	SelfupConExt1(const std::string &cur_exe_filename, const std::string &refname) :
 		m_cur_exe_filename(cur_exe_filename),
+		m_refname(refname),
 		m_update_have(false),
 		m_update_buffer()
 	{}
@@ -344,6 +345,7 @@ public:
 
 public:
 	std::string                  m_cur_exe_filename;
+	std::string                  m_refname;
 
 	bool                         m_update_have;
 	std::unique_ptr<std::string> m_update_buffer;
@@ -362,6 +364,8 @@ public:
 		unique_ptr_gitrepository memory_repository(selfup_git_memory_repository_new(), deleteGitrepository);
 
 		NetworkPacket packet_req_latest(SELFUP_CMD_REQUEST_LATEST_SELFUPDATE_BLOB, networkpacket_cmd_tag_t());
+		packet_req_latest << (uint32_t) m_ext->m_refname.size();
+		packet_req_latest.outSizedStr(m_ext->m_refname.data(), m_ext->m_refname.size());
 		m_respond->respondOneshot(std::move(packet_req_latest));
 
 		NetworkPacket res_latest_pkt = m_respond->waitFrame();
@@ -744,7 +748,7 @@ void selfup_start_mainupdate_crank(Address addr)
 void selfup_start_crank(Address addr)
 {
 	std::string cur_exe_filename = ns_filesys::current_executable_filename();
-	std::shared_ptr<SelfupConExt1> ext(new SelfupConExt1(cur_exe_filename));
+	std::shared_ptr<SelfupConExt1> ext(new SelfupConExt1(cur_exe_filename, "refs/heads/selfup"));
 	std::unique_ptr<SelfupWork1> work(new SelfupWork1(addr, ext));
 	work->start();
 	work->join();
