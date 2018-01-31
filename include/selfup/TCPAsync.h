@@ -19,6 +19,7 @@
 #include <selfup/NetworkPacket.h>
 
 #define TCPASYNC_FRAME_SIZE_MAX (256 * 1024 * 1024)
+#define TCPASYNC_SENDFILE_COUNT_PARAM 524288
 
 /* https://msdn.microsoft.com/en-us/library/windows/desktop/ms740516(v=vs.85).aspx */
 typedef ::std::unique_ptr<int, void(*)(int *fd)> unique_ptr_fd;
@@ -236,6 +237,8 @@ private:
 	std::deque<unique_ptr_fd> m_queue_incoming;
 };
 
+#ifdef _WIN32
+
 void tcpthreaded_socket_close_helper(int *fd)
 {
 	if (fd && *fd != INVALID_SOCKET) {
@@ -393,5 +396,205 @@ void tcpthreaded_startup_helper()
 	if (WSAStartup(versionRequested, &wsaData))
 		throw std::runtime_error("wsastartup");
 }
+
+#else  /* _WIN32 */
+
+void tcpthreaded_socket_close_helper(int *fd)
+{
+	if (fd && *fd != -1) {
+		close(*fd);
+		*fd = -1;
+	}
+}
+
+unique_ptr_fd tcpthreaded_socket_helper()
+{
+	unique_ptr_fd sock(new int(socket(AF_INET, SOCK_STREAM, IPPROTO_TCP)), TCPSocket::deleteFd);
+	if (*sock < 0)
+		throw std::runtime_error("socket");
+	return sock;
+}
+
+unique_ptr_fd tcpthreaded_socket_listen_helper(Address addr)
+{
+	unique_ptr_fd sock(new int(socket(AF_INET, SOCK_STREAM, IPPROTO_TCP)), TCPSocket::deleteFd);
+	if (*sock < 0)
+		throw std::runtime_error("socket");
+	struct sockaddr_in sockaddr = {};
+	sockaddr.sin_family = addr.getFamily();
+	sockaddr.sin_port = htons(addr.getPort());
+	sockaddr.sin_addr.s_addr = htonl(addr.getAddr4());
+	if (bind(*sock, (struct sockaddr *) &sockaddr, sizeof sockaddr) < 0)
+		throw std::runtime_error("bind");
+	if (listen(*sock, 5)) < 0)
+		throw std::runtime_error("listen");
+	return sock;
+}
+
+unique_ptr_fd tcpthreaded_socket_accept_helper(int fd)
+{
+	int ret = 0;
+	struct sockaddr_in sockaddr = {};
+	socklen_t socklen = sizeof sockaddr; // FIXME: socklen_t for NIX
+	while ((ret = accept(fd, (struct sockaddr *) &sockaddr, &socklen)) < 0)
+	{
+		if (errno == EINTR)
+			continue;
+		throw std::runtime_error("accept");
+	}
+	unique_ptr_fd nsock(new int(ret), TCPSocket::deleteFd);
+	return nsock;
+}
+
+void tcpthreaded_socket_connect_helper(int fd, Address addr)
+{
+	int ret = 0;
+	struct sockaddr_in sockaddr = {};
+	sockaddr.sin_family = addr.getFamily();
+	sockaddr.sin_port = htons(addr.getPort());
+	sockaddr.sin_addr.s_addr = htonl(addr.getAddr4());
+	while ((ret = connect(fd, (struct sockaddr *) &sockaddr, sizeof sockaddr)) < 0)
+	{
+		if (errno == EINTR)
+			continue;
+		throw std::runtime_error("connect");
+	}
+}
+
+NetworkPacket tcpthreaded_blocking_read_helper(int fd)
+{
+	int rcvt = 0;
+
+	/* read header */
+
+	uint8_t hdr[9] = {};
+
+	while ((rcvt = recv(fd, (char *) hdr, 9, MSG_WAITALL)) < 0)
+	{
+		if (errno == EINTR)
+			continue;
+		throw std::runtime_error("recv");
+	}
+	if (rcvt == 0)
+		throw std::runtime_error("recv disconnect");
+
+	/* validate */
+
+	if (!!memcmp(hdr, "FRAME", 5))
+		throw ProtocolExc("frame magic");
+	const uint32_t sz = (hdr[5] << 24) | (hdr[6] << 16) | (hdr[7] << 8) | (hdr[8] << 0);
+
+	if (sz > TCPASYNC_FRAME_SIZE_MAX)
+		throw std::runtime_error("frame size");
+
+	/* read packet */
+
+	std::vector<uint8_t> buf;
+	buf.resize(sz);
+
+	while ((rcvt = recv(fd, (char *) buf.data(), buf.size(), MSG_WAITALL)) < 0)
+	{
+		if (errno == EINTR)
+			continue;
+		throw std::runtime_error("recv");
+	}
+	if (rcvt == 0)
+		throw std::runtime_error("recv disconnect");
+
+	NetworkPacket packet(std::move(buf), networkpacket_vec_steal_tag_t());
+
+	return packet;
+}
+
+void tcpthreaded_blocking_write_helper(int fd, NetworkPacket *packet, size_t afterpacket_extra_size)
+{
+	/* write header */
+
+	const size_t fsz = packet->getDataSize() + afterpacket_extra_size;
+
+	const uint8_t hdr[9] = { 'F', 'R', 'A', 'M', 'E', (fsz >> 24) & 0xFF, (fsz >> 16) & 0xFF, (fsz >> 8) & 0xFF, (fsz >> 0) & 0xFF };
+
+	const size_t iov_len = 2;
+	struct iovec iov[2] = {};
+	iov[0].iov_base = hdr;
+	iov[0].iov_len  = 9;
+	iov[1].iov_base = packet->getDataPtr();
+	iov[1].iov_len  = packet->getDataSize();
+
+	while (iov[iov_len - 1].iov_len != 0) {
+		ssize_t nwritten = 0;
+		while ((nwritten = writev(fd, iov, 2)) < 0) {
+			if (errno == EINTR)
+				continue;
+			throw std::runtime_error("writev");
+		}
+		if (nwritten == 0)
+			throw std::runtime_error("writev zero");
+
+		/* account for nwritten bytes */
+		size_t iovidx = 0;
+		while (nwritten && iovidx < iov_len) {
+			size_t take = GS_MIN(nwritten, iov[iovidx].iov_len);
+			iov[iovidx].iov_base += take;
+			iov[iovidx].iov_len  -= take;
+			nwritten -= take;
+			if (iov[iovidx].iov_len == 0)
+				iovidx++;
+		}
+		/* call indicates more written more bytes than available in iov - WTF */
+		if (nwritten)
+			throw std::runtime_error("writev nwritten");
+	}
+}
+
+void tcpthreaded_blocking_sendfile_helper(int fd, int fdfile, size_t size)
+{
+	off_t offset = 0;
+	while (offset < size) {
+		ssize_t nwritten = 0;
+		while ((nwritten = sendfile(fd, fdfile, &offset, size - offset)) < 0)
+		{
+			if (errno == EINTR)
+				continue;
+			throw std::runtime_error("sendfile");
+		}
+		if (nwritten == 0)
+			throw std::runtime_error("sendfile zero");
+
+		offset += nwritten;
+	}
+}
+
+unique_ptr_fd tcpthreaded_file_open_size_helper(const std::string &filename, size_t *o_size)
+{
+	/* FIXME: does open require handling EINTR ? */
+	unique_ptr_fd fdfile(new int(open(filename.c_str(), O_RDONLY)), TCPSocket::deleteFdFileNotSocket);
+	if (fdfile < 0)
+		throw new std::runtime_error("file open");
+
+	struct stat buf = {};
+	if (fstat(*fdfile, &buf) == -1)
+		throw new std::runtime_error("file stat");
+	assert((buf.st_mode & S_IFREG) == S_IFREG);
+	const size_t size = buf.st_size;
+
+	*o_size = size;
+	return fdfile;
+}
+
+void tcpthreaded_file_close_helper(int *fd)
+{
+	if (fd && *fd != -1) {
+		close(*fd);
+		*fd = -1;
+	}
+}
+
+void tcpthreaded_startup_helper()
+{
+	/* nothing - windows needs WSAStartup for example */
+}
+
+#endif /* _WIN32 */
 
 #endif /* _TCPASYNC_H_ */
