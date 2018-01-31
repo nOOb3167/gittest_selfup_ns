@@ -524,6 +524,8 @@ public:
 
 		git_oid new_commit_oid = writeCommitDummy(repo.get(), res_latest_oid);
 		unique_ptr_gitreference new_ref(selfup_git_reference_create_and_force_set(repo.get(), m_ext->m_refname, new_commit_oid), deleteGitreference);
+
+		m_ext->confirmUpdate();
 	}
 
 	git_oid getHeadTree(git_repository *repo, const std::string &refname)
@@ -731,12 +733,7 @@ void selfup_start_mainupdate_crank(Address addr)
 	work->start();
 	work->join();
 
-	if (! ext->m_update_have)
-		return;
-
-	if (0) {
-		selfup_checkout(repopath, refname, checkoutpath);
-	}
+	selfup_checkout(repopath, refname, checkoutpath);
 }
 
 void selfup_start_crank(Address addr)
