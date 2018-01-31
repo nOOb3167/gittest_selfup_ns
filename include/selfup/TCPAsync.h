@@ -20,12 +20,84 @@
 
 #define TCPASYNC_FRAME_SIZE_MAX (256 * 1024 * 1024)
 
-TCPSocket::unique_ptr_fd tcpthreaded_socket_listen_helper(Address addr);
-TCPSocket::unique_ptr_fd tcpthreaded_socket_accept_helper(int fd);
+/* https://msdn.microsoft.com/en-us/library/windows/desktop/ms740516(v=vs.85).aspx */
+typedef ::std::unique_ptr<int, void(*)(int *fd)> unique_ptr_fd;
+typedef ::std::shared_ptr<int>                   shared_ptr_fd;
+
+unique_ptr_fd tcpthreaded_socket_helper();
+unique_ptr_fd tcpthreaded_socket_listen_helper(Address addr);
+unique_ptr_fd tcpthreaded_socket_accept_helper(int fd);
+void tcpthreaded_socket_connect_helper(int fd, Address addr);
 NetworkPacket tcpthreaded_blocking_read_helper(int fd);
 void tcpthreaded_blocking_write_helper(int fd, NetworkPacket *packet, size_t afterpacket_extra_size);
 void tcpthreaded_blocking_sendfile_helper(int fd, int fdfile, size_t size);
-TCPSocket::unique_ptr_fd tcpthreaded_file_open_size_helper(const std::string &filename, size_t *o_size);
+unique_ptr_fd tcpthreaded_file_open_size_helper(const std::string &filename, size_t *o_size);
+void tcpthreaded_startup_helper();
+
+class TCPSocket
+{
+public:
+
+	TCPSocket() :
+		m_handle(tcpthreaded_socket_helper())
+	{}
+
+	void Connect(Address addr)
+	{
+		if (addr.getFamily() != AF_INET)
+			throw std::runtime_error("TCPSocket connect family");
+
+		tcpthreaded_socket_connect_helper(*m_handle, addr);
+	}
+
+	void Send(NetworkPacket *packet)
+	{
+		tcpthreaded_blocking_write_helper(*m_handle, packet, 0);
+	}
+
+	NetworkPacket Recv()
+	{
+		return tcpthreaded_blocking_read_helper(*m_handle);
+	}
+
+	static void deleteFd(int *fd)
+	{
+		if (fd) {
+#ifdef _WIN32
+			if (*fd != INVALID_SOCKET) {
+				closesocket(*fd);
+				*fd = INVALID_SOCKET;
+			}
+#else
+			if (*fd != -1) {
+				close(*fd);
+				*fd = -1;
+			}
+#endif
+			delete fd;
+		}
+	}
+
+	static void deleteFdFileNotSocket(int *fd)
+	{
+		if (fd) {
+#ifdef _WIN32
+			if (*fd != -1) {
+				_close(*fd);
+				*fd = -1;
+			}
+#else
+			if (*fd != -1) {
+				close(*fd);
+				*fd = -1;
+			}
+#endif
+		}
+	}
+
+private:
+	unique_ptr_fd m_handle;
+};
 
 class TCPThreaded
 {
@@ -45,7 +117,7 @@ public:
 		void respondOneshotSendfile(NetworkPacket packet, const std::string &filename)
 		{
 			size_t size = 0;
-			TCPSocket::unique_ptr_fd fdfile(tcpthreaded_file_open_size_helper(filename, &size));
+			unique_ptr_fd fdfile(tcpthreaded_file_open_size_helper(filename, &size));
 			tcpthreaded_blocking_write_helper(m_fd, &packet, size);
 			tcpthreaded_blocking_sendfile_helper(m_fd, *fdfile, size);
 		}
@@ -130,7 +202,7 @@ protected:
 	void threadFuncListenLoop2()
 	{
 		while (true) {
-			TCPSocket::unique_ptr_fd nsock(tcpthreaded_socket_accept_helper(*m_listen));
+			unique_ptr_fd nsock(tcpthreaded_socket_accept_helper(*m_listen));
 
 			{
 				std::unique_lock<std::mutex> lock(m_queue_mutex);
@@ -155,7 +227,7 @@ protected:
 		while (true) {
 			std::unique_lock<std::mutex> lock(m_queue_mutex);
 			m_queue_cv.wait(lock, [&]() { return !m_queue_incoming.empty(); });
-			TCPSocket::unique_ptr_fd fd = std::move(m_queue_incoming.front());
+			unique_ptr_fd fd = std::move(m_queue_incoming.front());
 			m_queue_incoming.pop_front();
 			lock.unlock();
 
@@ -175,7 +247,7 @@ protected:
 private:
 	function_framedispatch_t m_framedispatch;
 
-	TCPSocket::unique_ptr_fd m_listen;
+	unique_ptr_fd m_listen;
 	std::exception_ptr m_listen_thread_exc;
 	std::thread m_listen_thread;
 
@@ -184,12 +256,20 @@ private:
 
 	std::mutex m_queue_mutex;
 	std::condition_variable m_queue_cv;
-	std::deque<TCPSocket::unique_ptr_fd> m_queue_incoming;
+	std::deque<unique_ptr_fd> m_queue_incoming;
 };
 
-TCPSocket::unique_ptr_fd tcpthreaded_socket_listen_helper(Address addr)
+unique_ptr_fd tcpthreaded_socket_helper()
 {
-	TCPSocket::unique_ptr_fd sock(new int(socket(AF_INET, SOCK_STREAM, IPPROTO_TCP)), TCPSocket::deleteFd);
+	unique_ptr_fd sock(new int(socket(AF_INET, SOCK_STREAM, IPPROTO_TCP)), TCPSocket::deleteFd);
+	if (*sock < 0)
+		throw std::runtime_error("socket");
+	return sock;
+}
+
+unique_ptr_fd tcpthreaded_socket_listen_helper(Address addr)
+{
+	unique_ptr_fd sock(new int(socket(AF_INET, SOCK_STREAM, IPPROTO_TCP)), TCPSocket::deleteFd);
 	if (*sock < 0)
 		throw std::runtime_error("socket");
 	struct sockaddr_in sockaddr = {};
@@ -203,14 +283,26 @@ TCPSocket::unique_ptr_fd tcpthreaded_socket_listen_helper(Address addr)
 	return sock;
 }
 
-TCPSocket::unique_ptr_fd tcpthreaded_socket_accept_helper(int fd)
+unique_ptr_fd tcpthreaded_socket_accept_helper(int fd)
 {
 	struct sockaddr_in sockaddr = {};
 	int socklen = sizeof sockaddr; // FIXME: socklen_t for NIX
-	TCPSocket::unique_ptr_fd nsock(new int(accept(fd, (struct sockaddr *) &sockaddr, &socklen)), TCPSocket::deleteFd);
+	unique_ptr_fd nsock(new int(accept(fd, (struct sockaddr *) &sockaddr, &socklen)), TCPSocket::deleteFd);
 	if (*nsock < 0)
 		throw std::runtime_error("accept");
 	return nsock;
+}
+
+void tcpthreaded_socket_connect_helper(int fd, Address addr)
+{
+	struct sockaddr_in sockaddr = {};
+
+	sockaddr.sin_family = addr.getFamily();
+	sockaddr.sin_port = htons(addr.getPort());
+	sockaddr.sin_addr.s_addr = htonl(addr.getAddr4());
+
+	if (connect(fd, (struct sockaddr *) &sockaddr, sizeof sockaddr) < 0)
+		throw std::runtime_error("connect");
 }
 
 NetworkPacket tcpthreaded_blocking_read_helper(int fd)
@@ -283,9 +375,9 @@ void tcpthreaded_blocking_sendfile_helper(int fd, int fdfile, size_t size)
 		throw std::runtime_error("send sent");
 }
 
-TCPSocket::unique_ptr_fd tcpthreaded_file_open_size_helper(const std::string &filename, size_t *o_size)
+unique_ptr_fd tcpthreaded_file_open_size_helper(const std::string &filename, size_t *o_size)
 {
-	TCPSocket::unique_ptr_fd fdfile(new int(_open(filename.c_str(), _O_RDONLY | _O_BINARY)), TCPSocket::deleteFdFileNotSocket);
+	unique_ptr_fd fdfile(new int(_open(filename.c_str(), _O_RDONLY | _O_BINARY)), TCPSocket::deleteFdFileNotSocket);
 
 	if (fdfile < 0)
 		throw new std::runtime_error("file open");
@@ -298,6 +390,15 @@ TCPSocket::unique_ptr_fd tcpthreaded_file_open_size_helper(const std::string &fi
 
 	*o_size = size;
 	return std::move(fdfile);
+}
+
+void tcpthreaded_startup_helper()
+{
+	WORD versionRequested = MAKEWORD(1, 1);
+	WSADATA wsaData;
+
+	if (WSAStartup(versionRequested, &wsaData))
+		throw std::runtime_error("wsastartup");
 }
 
 #endif /* _TCPASYNC_H_ */

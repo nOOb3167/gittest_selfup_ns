@@ -190,7 +190,7 @@ void servup_start_crank(Address addr)
 
 int main(int argc, char **argv)
 {
-	tcpsocket_startup_helper();
+	tcpthreaded_startup_helper();
 	servup_start_crank(Address(AF_INET, 6757, 0x7F000001, address_ipv4_tag_t()));
 
 	return EXIT_SUCCESS;

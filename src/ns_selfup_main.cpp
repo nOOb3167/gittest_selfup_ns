@@ -17,7 +17,7 @@
 #include <selfup/NetworkPacket.h>
 #include <selfup/ns_filesys.h>
 #include <selfup/ns_helpers.h>
-#include <selfup/TCPSocket.h>
+#include <selfup/TCPAsync.h>
 
 #define SELFUP_ARG_CHILD "--xchild"
 #define SELFUP_ARG_VERSUB "--xversub"
@@ -206,60 +206,13 @@ public:
 protected:
 	void virtualRespond(NetworkPacket packet) override
 	{
-		uint32_t sz = packet.getDataSize();
-		uint8_t buf[4] = { (sz >> 24) & 0xFF, (sz >> 16) & 0xFF, (sz >> 8) & 0xFF, (sz >> 0) & 0xFF };
-
-		// FIXME: use writev / WSASend multibuffer
-
-		m_sock->Send("FRAME", 5);
-		m_sock->Send(buf, sizeof buf);
-
-		m_sock->Send(packet.getDataPtr(), packet.getDataSize());
+		m_sock->Send(&packet);
 	}
 
 	NetworkPacket virtualWaitFrame() override
 	{
-		long long timestamp = selfup_timestamp();
-		const long long deadline = g_selfup_disable_timeout ? LLONG_MAX : timestamp + SELFUP_LONG_TIMEOUT_MS;
-		long long buf_off = 0;
-		std::string buf;
-		int rcvt = 0;
-		while (timestamp <= deadline) {
-			/* decide how much data to wait for*/
-			size_t wait_for = 0;
-
-			if (buf_off < 9)
-				wait_for = 9 - buf_off; /* decide to wait_for just header */
-			if (buf_off >= 9) {
-				/* validate */
-				if (!! memcmp(&buf[0], "FRAME", 5))
-					throw ProtocolExc("waitFrame frame");
-				/* decide to wait_for header+data */
-				uint32_t sz = (buf[5] << 24) | (buf[6] << 16) | (buf[7] << 8) | (buf[8] << 0);
-				if (sz > SELFUP_FRAME_SIZE_MAX)
-					throw std::runtime_error("waitFrame size");
-				wait_for = (9 + sz) - buf_off;
-				/* but we might have enough data already - so see if we can output */
-				if (buf_off >= 9 + sz) {
-					/* thanks to the wait_for mechanism should have exactly enough data - no leftover */
-					assert(buf_off == 9 + sz);
-					NetworkPacket packet((uint8_t *)&buf[9], sz, networkpacket_buf_len_tag_t());
-					return std::move(packet);
-				}
-			}
-
-			/* ensure space for wait_for */
-			if (buf.size() < buf_off + wait_for)
-				buf.resize(buf_off + wait_for);
-
-			if (-1 == (rcvt = m_sock->ReceiveWaiting(((uint8_t *) buf.data()) + buf_off, wait_for, GS_MIN(deadline - timestamp, INT_MAX))))
-				throw std::runtime_error("waitFrame recv");
-			buf_off += rcvt;
-
-			timestamp = selfup_timestamp();
-		}
-		assert(! (timestamp <= deadline));
-		throw std::runtime_error("waitFrame time");
+		/* FIXME: timeout support */
+		return m_sock->Recv();
 	}
 
 private:
@@ -821,7 +774,7 @@ int main(int argc, char **argv)
 	if (git_libgit2_init() < 0)
 		throw std::runtime_error("libgit2 init");
 
-	tcpsocket_startup_helper();
+	tcpthreaded_startup_helper();
 	selfup_start_crank(Address(AF_INET, 6757, 0x7F000001, address_ipv4_tag_t()));
 	selfup_start_mainupdate_crank(Address(AF_INET, 6757, 0x7F000001, address_ipv4_tag_t()));
 
