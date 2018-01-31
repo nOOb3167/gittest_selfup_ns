@@ -95,6 +95,7 @@ std::string decode_hex(const std::string &hex, bool web_programmer_designed_swap
 std::string encode_hex(const std::string &bin, bool web_programmer_designed_swapped_hex_mental_illness);
 
 bool oid_equals(const ns_git_oid &a, const ns_git_oid &b);
+ns_git_oid oid_zero();
 ns_git_oid oid_from_raw(const std::string &raw);
 ns_git_oid oid_from_hexstr(const std::string &str);
 ns_git_oid oid_from_ref_file(const std::string &reffilepath);
@@ -272,6 +273,13 @@ std::string encode_hex(const std::string &bin, bool web_programmer_designed_swap
 bool oid_equals(const ns_git_oid &a, const ns_git_oid &b)
 {
 	return ! oid_comparator_t()(a, b) && ! oid_comparator_t()(b, a);
+}
+
+ns_git_oid oid_zero()
+{
+	ns_git_oid ret;
+	memset(ret.id, '\0', NS_GIT_OID_RAWSZ);
+	return ret;
 }
 
 ns_git_oid oid_from_raw(const std::string &raw)

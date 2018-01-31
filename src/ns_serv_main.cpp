@@ -1,8 +1,10 @@
 #include <cstring>
 #include <exception>
+#include <map>
 #include <memory>
 #include <stdexcept>
 #include <thread>
+#include <utility>
 
 #include <selfup/ns_git_shims.h>
 #include <selfup/ns_helpers.h>
@@ -14,24 +16,43 @@ using namespace ns_git;
 
 typedef TCPThreaded::Respond Respond;
 
-class ServupCacheHead
+class ServupCache
 {
 public:
-	ServupCacheHead() :
-		m_commit_tree_oid(),
-		m_trees()
+	class Head
 	{
-		memset(m_commit_tree_oid.id, '\0', NS_GIT_OID_RAWSZ);
-	}
+	public:
+		ns_git_oid m_commit_tree_oid = oid_zero();
+		treemap_t  m_trees;
+	};
 
-	ServupCacheHead(ns_git_oid commit_tree_oid, treemap_t trees) :
-		m_commit_tree_oid(commit_tree_oid),
-		m_trees(std::move(trees))
+	ServupCache() :
+		m_cache()
 	{}
 
+	void refreshOid(const std::string &repopath, ns_git_oid wanted_oid)
+	{
+		/* ensure entry */
+		auto it = m_cache.find(wanted_oid);
+		if (it == m_cache.end())
+			it = m_cache.insert(std::make_pair(wanted_oid, Head())).first;
+		/* skip refresh if entry not outdated */
+		if (oid_equals(it->second.m_commit_tree_oid, wanted_oid))
+			return;
+		/* actually refresh */
+		it->second.m_commit_tree_oid = wanted_oid;
+		it->second.m_trees = std::move(treelist_recursive(repopath, wanted_oid));
+	}
+
+	const treemap_t & getOidTrees(const std::string &repopath, ns_git_oid wanted_oid)
+	{
+		refreshOid(repopath, wanted_oid);
+		assert(m_cache.find(wanted_oid) != m_cache.end());
+		return m_cache.find(wanted_oid)->second.m_trees;
+	}
+
 public:
-	ns_git_oid m_commit_tree_oid;
-	treemap_t  m_trees;
+	std::map<ns_git_oid, Head, oid_comparator_t> m_cache;
 };
 
 class ServupConExt2
@@ -39,25 +60,17 @@ class ServupConExt2
 public:
 	ServupConExt2(const std::string &repopath) :
 		m_repopath(repopath),
-		m_cache_head(new ServupCacheHead())
+		m_cache(new ServupCache())
 	{};
 
 	void cacheHeadRefresh(ns_git_oid wanted_oid)
 	{
-		// FIXME: make cache head per-refname
-
-		if (m_cache_head && oid_equals(m_cache_head->m_commit_tree_oid, wanted_oid))
-			return;
-
-		treemap_t trees(treelist_recursive(m_repopath, wanted_oid));
-		std::shared_ptr<ServupCacheHead> cache_head(new ServupCacheHead(wanted_oid, std::move(trees)));
-
-		m_cache_head = cache_head;
+		m_cache->refreshOid(m_repopath, wanted_oid);
 	}
 
 public:
 	std::string m_repopath;
-	std::shared_ptr<ServupCacheHead> m_cache_head;
+	std::shared_ptr<ServupCache> m_cache;
 };
 
 class ServupWork2
@@ -125,11 +138,7 @@ public:
 			ns_git_oid requested_oid = {};
 			memcpy(requested_oid.id, packet->inSizedStr(NS_GIT_OID_RAWSZ), NS_GIT_OID_RAWSZ);
 
-			/* serve from cache if applicable */
-
-			const treemap_t &trees = oid_equals(m_ext->m_cache_head->m_commit_tree_oid, requested_oid)
-				? m_ext->m_cache_head->m_trees
-				: treelist_recursive(m_ext->m_repopath, requested_oid);
+			const treemap_t &trees = m_ext->m_cache->getOidTrees(m_ext->m_repopath, requested_oid);
 
 			NetworkPacket res_treelist_pkt(SELFUP_CMD_RESPONSE_TREELIST, networkpacket_cmd_tag_t());
 			res_treelist_pkt << (uint32_t) trees.size();
