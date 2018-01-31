@@ -15,7 +15,7 @@
 #include <utility>
 #include <vector>
 
-#include <selfup/TCPSocket.h>
+#include <selfup/TCPAddress.h>
 #include <selfup/NetworkPacket.h>
 
 #define TCPASYNC_FRAME_SIZE_MAX (256 * 1024 * 1024)

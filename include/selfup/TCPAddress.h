@@ -1,5 +1,5 @@
-#ifndef _TCPSOCKET_H_
-#define _TCPSOCKET_H_
+#ifndef _TCPADDRESS_H_
+#define _TCPADDRESS_H_
 
 #include <cstdint>
 #include <cstring>
@@ -69,4 +69,4 @@ struct address_less_t {
 	}
 };
 
-#endif /* _TCPSOCKET_H_ */
+#endif /* _TCPADDRESS_H_ */
