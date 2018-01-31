@@ -23,6 +23,7 @@ std::string build_modified_filename(
 	std::string replacement_suffix,
 	std::string replacement_extension);
 
+std::string path_directory(std::string path);
 std::string path_append_abs_rel(
 	std::string absolute,
 	std::string relative);

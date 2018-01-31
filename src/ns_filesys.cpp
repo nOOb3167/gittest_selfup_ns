@@ -21,27 +21,6 @@
 namespace ns_filesys
 {
 
-std::string ns_win_path_directory(std::string path)
-{
-	char Drive[_MAX_DRIVE] = {};
-	char Dir[_MAX_DIR] = {};
-	char FName[_MAX_FNAME] = {};
-	char Ext[_MAX_EXT] = {};
-
-	/* http://www.flounder.com/msdn_documentation_errors_and_omissions.htm
-	*    see for _splitpath: """no more than this many characters will be written to each buffer""" */
-	_splitpath(path.c_str(), Drive, Dir, FName, Ext);
-
-	std::string ret(_MAX_PATH, '\0');
-
-	if (!! _makepath_s((char *) ret.data(), ret.size(), Drive, Dir, NULL, NULL))
-		throw FilesysExc("makepath");
-
-	std::string ret2(ret.c_str());
-
-	return ret2;
-}
-
 std::string build_modified_filename(
 	std::string base_filename,
 	std::string expected_suffix,
@@ -65,6 +44,27 @@ std::string build_modified_filename(
 	out = ss.str();
 
 	return out;
+}
+
+std::string path_directory(std::string path)
+{
+	char Drive[_MAX_DRIVE] = {};
+	char Dir[_MAX_DIR] = {};
+	char FName[_MAX_FNAME] = {};
+	char Ext[_MAX_EXT] = {};
+
+	/* http://www.flounder.com/msdn_documentation_errors_and_omissions.htm
+	*    see for _splitpath: """no more than this many characters will be written to each buffer""" */
+	_splitpath(path.c_str(), Drive, Dir, FName, Ext);
+
+	std::string ret(_MAX_PATH, '\0');
+
+	if (!! _makepath_s((char *) ret.data(), ret.size(), Drive, Dir, NULL, NULL))
+		throw FilesysExc("makepath");
+
+	std::string ret2(ret.c_str());
+
+	return ret2;
 }
 
 std::string path_append_abs_rel(
@@ -174,7 +174,7 @@ std::string current_executable_directory()
 {
 
 	std::string cur_exe_filename = current_executable_filename();
-	std::string dir = ns_win_path_directory(cur_exe_filename);
+	std::string dir = path_directory(cur_exe_filename);
 	return dir;
 }
 
