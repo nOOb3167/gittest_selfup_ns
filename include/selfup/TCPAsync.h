@@ -24,6 +24,7 @@
 typedef ::std::unique_ptr<int, void(*)(int *fd)> unique_ptr_fd;
 typedef ::std::shared_ptr<int>                   shared_ptr_fd;
 
+void tcpthreaded_socket_close_helper(int *fd);
 unique_ptr_fd tcpthreaded_socket_helper();
 unique_ptr_fd tcpthreaded_socket_listen_helper(Address addr);
 unique_ptr_fd tcpthreaded_socket_accept_helper(int fd);
@@ -32,6 +33,7 @@ NetworkPacket tcpthreaded_blocking_read_helper(int fd);
 void tcpthreaded_blocking_write_helper(int fd, NetworkPacket *packet, size_t afterpacket_extra_size);
 void tcpthreaded_blocking_sendfile_helper(int fd, int fdfile, size_t size);
 unique_ptr_fd tcpthreaded_file_open_size_helper(const std::string &filename, size_t *o_size);
+void tcpthreaded_file_close_helper(int *fd);
 void tcpthreaded_startup_helper();
 
 class TCPSocket
@@ -62,37 +64,12 @@ public:
 
 	static void deleteFd(int *fd)
 	{
-		if (fd) {
-#ifdef _WIN32
-			if (*fd != INVALID_SOCKET) {
-				closesocket(*fd);
-				*fd = INVALID_SOCKET;
-			}
-#else
-			if (*fd != -1) {
-				close(*fd);
-				*fd = -1;
-			}
-#endif
-			delete fd;
-		}
+		tcpthreaded_socket_close_helper(fd);
 	}
 
 	static void deleteFdFileNotSocket(int *fd)
 	{
-		if (fd) {
-#ifdef _WIN32
-			if (*fd != -1) {
-				_close(*fd);
-				*fd = -1;
-			}
-#else
-			if (*fd != -1) {
-				close(*fd);
-				*fd = -1;
-			}
-#endif
-		}
+		tcpthreaded_file_close_helper(fd);
 	}
 
 private:
@@ -259,6 +236,14 @@ private:
 	std::deque<unique_ptr_fd> m_queue_incoming;
 };
 
+void tcpthreaded_socket_close_helper(int *fd)
+{
+	if (fd && *fd != INVALID_SOCKET) {
+		closesocket(*fd);
+		*fd = INVALID_SOCKET;
+	}
+}
+
 unique_ptr_fd tcpthreaded_socket_helper()
 {
 	unique_ptr_fd sock(new int(socket(AF_INET, SOCK_STREAM, IPPROTO_TCP)), TCPSocket::deleteFd);
@@ -390,6 +375,14 @@ unique_ptr_fd tcpthreaded_file_open_size_helper(const std::string &filename, siz
 
 	*o_size = size;
 	return std::move(fdfile);
+}
+
+void tcpthreaded_file_close_helper(int *fd)
+{
+	if (fd && *fd != -1) {
+		_close(*fd);
+		*fd = -1;
+	}
 }
 
 void tcpthreaded_startup_helper()
