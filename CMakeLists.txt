@@ -9,6 +9,7 @@ LIST(APPEND CMAKE_MODULE_PATH
 SET(SELFUP_NS_HEADERS
 	include/selfup/NetworkPacket.h
 	include/selfup/ns_filesys.h
+	include/selfup/ns_gui.h
 	include/selfup/ns_helpers.h
 	include/selfup/TCPAddress.h
 	include/selfup/TCPAsync.h
@@ -16,6 +17,8 @@ SET(SELFUP_NS_HEADERS
 SET(SELFUP_NS_SOURCES
 	src/NetworkPacket.cpp
 	src/ns_filesys.cpp
+	src/ns_gui.cpp
+	src/ns_helpers.cpp
 	src/ns_selfup_main.cpp
 )
 
@@ -30,6 +33,7 @@ SET(SERV_NS_HEADERS
 SET(SERV_NS_SOURCES
 	src/NetworkPacket.cpp
 	src/ns_filesys.cpp
+	src/ns_helpers.cpp
 	src/ns_serv_main.cpp
 )
 

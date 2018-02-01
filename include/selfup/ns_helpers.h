@@ -1,6 +1,8 @@
 #ifndef _NS_HELPERS_H_
 #define _NS_HELPERS_H_
 
+#include <string>
+
 #define GS_MAX(x, y) (((x) > (y)) ? (x) : (y))
 #define GS_MIN(x, y) (((x) < (y)) ? (x) : (y))
 
@@ -15,5 +17,9 @@
 #define SELFUP_CMD_RESPONSE_OBJS3_DONE 9
 
 #define SELFUP_SELFUPDATE_BLOB_ENTRY_FILENAME "selfup_ns.exe"
+
+char decode_hex_char(const char hex_char);
+std::string decode_hex(const std::string &hex, bool web_programmer_designed_swapped_hex_mental_illness);
+std::string encode_hex(const std::string &bin, bool web_programmer_designed_swapped_hex_mental_illness);
 
 #endif /* _NS_HELPERS_H_ */
