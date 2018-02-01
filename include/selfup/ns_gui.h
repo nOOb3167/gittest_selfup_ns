@@ -33,10 +33,10 @@ public:
 	GuiProgress() :
 		m_mode(0),
 		m_ratio_a(0),
-		m_ratio_b(1),
+		m_ratio_b(0),
 		m_blip_val_old(0),
 		m_blip_val(0),
-		m_blip_cnt(1)
+		m_blip_cnt(-1)
 	{}
 
 	int m_mode; /* 0:ratio 1:blip */
