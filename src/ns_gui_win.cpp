@@ -11,10 +11,13 @@
 #include <wingdi.h>
 
 #include <selfup/ns_gui.h>
+#include <imgpbblip_96_32_.h>
+#include <imgpbempty_384_32_.h>
+#include <imgpbfull_384_32_.h>
 
 #define GS_GUI_WIN_FRAMERATE 30
 
-#define GS_GUI_WIN_READIMAGE_B_HEX(hdc, lump, p_img) win_readimage_b_hex(hdc, # lump, lump ## _str)
+#define GS_GUI_WIN_READIMAGE_B(hdc, lump) win_readimage_b(hdc, std::string(# lump), std::string((char *)(lump), sizeof (lump)))
 
 namespace ns_gui
 {
@@ -121,12 +124,12 @@ unique_ptr_hbitmap win_bitmap_from_rgb(
 	return hbitmap;
 }
 
-AuxImgB win_readimage_b_hex(
+AuxImgB win_readimage_b(
 	HDC hdc,
 	const std::string &filename,
-	std::string hex)
+	const std::string &data)
 {
-	AuxImg img = readimage_hex(filename, hex);
+	AuxImg img = readimage_data(filename, data);
 
 	unique_ptr_hbitmap hbitmap = win_bitmap_from_rgb(
 		hdc,
@@ -211,8 +214,8 @@ void win_clear_window(
 
 void win_draw_progress_ratio(
 	HDC hdc,
-	struct AuxImgB *img_pb_empty,
-	struct AuxImgB *img_pb_full,
+	AuxImgB *img_pb_empty,
+	AuxImgB *img_pb_full,
 	int dst_x, int dst_y,
 	int ratio_a, int ratio_b)
 {
@@ -224,10 +227,10 @@ void win_draw_progress_ratio(
 	win_drawimage_mask_b(hdc, GS_GUI_COLOR_MASK_RGB, img_pb_full, 0, 0, img_pb_full->m_width * ratio, img_pb_full->m_height, dst_x, dst_y);
 }
 
-int win_draw_progress_blip(
+void win_draw_progress_blip(
   HDC hdc,
-  struct AuxImgB *img_pb_empty,
-  struct AuxImgB *img_pb_blip,
+  AuxImgB *img_pb_empty,
+  AuxImgB *img_pb_blip,
   int dst_x, int dst_y,
   int blipcnt)
 {
@@ -317,9 +320,9 @@ void win_threadfunc()
 		throw std::runtime_error("win update window");
 
 	unique_ptr_hdc hdc_startup(new DeleteHdcData(hwnd, GetDC(hwnd)), deleteHdc);
-	AuxImgB img_pb_empty = GS_GUI_WIN_READIMAGE_B_HEX(hdc_startup->hdc, imgpbempty_384_32_);
-	AuxImgB img_pb_full  = GS_GUI_WIN_READIMAGE_B_HEX(hdc_startup->hdc, imgpbfull_384_32_);
-	AuxImgB img_pb_blip  = GS_GUI_WIN_READIMAGE_B_HEX(hdc_startup->hdc, imgpbblip_96_32_);
+	AuxImgB img_pb_empty = GS_GUI_WIN_READIMAGE_B(hdc_startup->hdc, imgpbempty_384_32_);
+	AuxImgB img_pb_full  = GS_GUI_WIN_READIMAGE_B(hdc_startup->hdc, imgpbfull_384_32_);
+	AuxImgB img_pb_blip  = GS_GUI_WIN_READIMAGE_B(hdc_startup->hdc, imgpbblip_96_32_);
 	hdc_startup.reset();
 
 	while (true) {

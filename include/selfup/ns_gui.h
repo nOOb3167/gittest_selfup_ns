@@ -44,6 +44,14 @@ public:
 	int m_blip_val_old, m_blip_val, m_blip_cnt;
 };
 
+AuxImg readimage_data(const std::string & filename, const std::string & data);
+AuxImg readimage_file(const std::string & filename);
+AuxImg readimage_hex(const std::string & filename, const std::string & hex);
+void progress_blip_calc(
+	int blip_cnt,
+	int img_pb_empty_width, int img_pb_blip_width,
+	int * o_src_x, int * o_draw_left, int * o_draw_width);
+
 }
 
 #endif /* _NS_GUI_ */

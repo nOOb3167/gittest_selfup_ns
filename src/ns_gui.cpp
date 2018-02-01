@@ -13,9 +13,7 @@
 namespace ns_gui
 {
 
-AuxImg readimage_data(
-	const std::string &filename,
-	const std::string &data)
+AuxImg readimage_data(const std::string &filename, const std::string &data)
 {
 	std::vector<std::string> tokens;
 
@@ -45,9 +43,7 @@ AuxImg readimage_file(const std::string &filename)
 	return readimage_data(filename, ns_filesys::file_read(filename));
 }
 
-AuxImg readimage_hex(
-	const std::string &filename,
-	const std::string &hex)
+AuxImg readimage_hex(const std::string &filename, const std::string &hex)
 {
 	return readimage_data(filename, decode_hex(hex, false));
 }
