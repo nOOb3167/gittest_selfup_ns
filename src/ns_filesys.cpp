@@ -46,62 +46,6 @@ std::string build_modified_filename(
 	return out;
 }
 
-std::string path_directory(std::string path)
-{
-	char Drive[_MAX_DRIVE] = {};
-	char Dir[_MAX_DIR] = {};
-	char FName[_MAX_FNAME] = {};
-	char Ext[_MAX_EXT] = {};
-
-	/* http://www.flounder.com/msdn_documentation_errors_and_omissions.htm
-	*    see for _splitpath: """no more than this many characters will be written to each buffer""" */
-	_splitpath(path.c_str(), Drive, Dir, FName, Ext);
-
-	std::string ret(_MAX_PATH, '\0');
-
-	if (!! _makepath_s((char *) ret.data(), ret.size(), Drive, Dir, NULL, NULL))
-		throw FilesysExc("makepath");
-
-	std::string ret2(ret.c_str());
-
-	return ret2;
-}
-
-std::string path_append_abs_rel(
-	std::string absolute,
-	std::string relative)
-{
-	int r = 0;
-
-	if (relative.find("..") != std::string::npos)
-		throw FilesysExc("path doubledots");
-
-	/** maximum length for PathIsRelative and PathAppend **/
-	if (absolute.size() > MAX_PATH || relative.size() > MAX_PATH)
-		throw FilesysExc("path length");
-
-	if (PathIsRelative(absolute.c_str()))
-		throw FilesysExc("path rel");
-
-	if (! PathIsRelative(relative.c_str()))
-		throw FilesysExc("path notrel");
-
-	/* prep output buffer with absolute path */
-
-	std::string out(absolute);
-	out.append(1, '\0');
-	out.resize(GS_MAX(out.size(), MAX_PATH));
-
-	/* append */
-
-	if (! PathAppend((char *) out.data(), relative.c_str()))
-		throw FilesysExc("path append");
-
-	std::string out2(out.c_str());
-
-	return out2;
-}
-
 std::string file_read(
 	std::string filename)
 {
@@ -158,6 +102,16 @@ std::string current_executable_relative_filename(std::string relative)
 	return combined;
 }
 
+std::string current_executable_directory()
+{
+
+	std::string cur_exe_filename = current_executable_filename();
+	std::string dir = path_directory(cur_exe_filename);
+	return dir;
+}
+
+#ifdef _WIN32
+
 std::string current_executable_filename()
 {
 	std::string fname(1024, '\0');
@@ -170,12 +124,60 @@ std::string current_executable_filename()
 	return fname;
 }
 
-std::string current_executable_directory()
+std::string path_directory(std::string path)
 {
+	char Drive[_MAX_DRIVE] = {};
+	char Dir[_MAX_DIR] = {};
+	char FName[_MAX_FNAME] = {};
+	char Ext[_MAX_EXT] = {};
 
-	std::string cur_exe_filename = current_executable_filename();
-	std::string dir = path_directory(cur_exe_filename);
-	return dir;
+	/* http://www.flounder.com/msdn_documentation_errors_and_omissions.htm
+	*    see for _splitpath: """no more than this many characters will be written to each buffer""" */
+	_splitpath(path.c_str(), Drive, Dir, FName, Ext);
+
+	std::string ret(_MAX_PATH, '\0');
+
+	if (!! _makepath_s((char *) ret.data(), ret.size(), Drive, Dir, NULL, NULL))
+		throw FilesysExc("makepath");
+
+	std::string ret2(ret.c_str());
+
+	return ret2;
+}
+
+std::string path_append_abs_rel(
+	std::string absolute,
+	std::string relative)
+{
+	int r = 0;
+
+	if (relative.find("..") != std::string::npos)
+		throw FilesysExc("path doubledots");
+
+	/** maximum length for PathIsRelative and PathAppend **/
+	if (absolute.size() > MAX_PATH || relative.size() > MAX_PATH)
+		throw FilesysExc("path length");
+
+	if (PathIsRelative(absolute.c_str()))
+		throw FilesysExc("path rel");
+
+	if (! PathIsRelative(relative.c_str()))
+		throw FilesysExc("path notrel");
+
+	/* prep output buffer with absolute path */
+
+	std::string out(absolute);
+	out.append(1, '\0');
+	out.resize(GS_MAX(out.size(), MAX_PATH));
+
+	/* append */
+
+	if (! PathAppend((char *) out.data(), relative.c_str()))
+		throw FilesysExc("path append");
+
+	std::string out2(out.c_str());
+
+	return out2;
 }
 
 void rename_file_file(
@@ -199,5 +201,153 @@ void directory_create_unless_exist(std::string dirname)
 		throw FilesysExc("directory create");
 	}
 }
+
+#else /* _WIN32 */
+
+static bool gs_nix_path_is_absolute(const std::string &path)
+{
+	return path.size() > 0 && path[0] == '/';
+}
+
+static std::string gs_nix_path_eat_trailing_slashes(const std::string &path)
+{
+	size_t off = path.size() - 1;
+	while (off < path.size() && path[off] == '/')
+		off--;
+	return path.substr(0, off + 1);
+}
+
+static std::string gs_nix_path_eat_trailing_nonslashes(const std::string &path)
+{
+	size_t off = path.size() - 1;
+	while (off < path.size() && path[off] != '/')
+		off--;
+	return path.substr(0, off + 1);
+}
+
+static void gs_nix_path_add_trailing_slash_cond_inplace(std::string *io_path)
+{
+	if (! (io_path.size() > 0 && io_path[io_path.size() - 1] == '/'))
+		io_path.append(1, '/');
+}
+
+std::string current_executable_filename()
+{
+	/* http://man7.org/linux/man-pages/man5/proc.5.html
+	*    /proc/[pid]/exe:
+	*    If the pathname has been
+	*         unlinked, the symbolic link will contain the string
+	*         '(deleted)' appended to the original pathname. */
+	// FIXME: does move count as unlinking? (probably so)
+	//   so if the process has moved itself (during selfupdate)
+	//   this call will basically fail (or at least return a weirder name
+
+	const char MAGIC_PROC_PATH_NAME[] = "/proc/self/exe";
+
+	std::string ret(1024, '\0');
+
+	ssize_t count = 0;
+
+	if ((count = readlink(MAGIC_PROC_PATH_NAME, ret.data(), ret.size())) < 0)
+		throw std::FilesysExc("readlink");
+
+	if (count >= ret.size())
+		throw std::FilesysExc("readlink count");
+
+	ret.resize(count);
+
+	if (! gs_nix_path_is_absolute(ret)))
+		throw std::FilesysExc("path not absolute");
+
+	return ret;
+}
+
+std::string path_directory(std::string path)
+{
+	/* async-signal-safe functions: safe */
+	int r = 0;
+
+	size_t LenOutputPath = 0;
+
+	const char OnlySlash[] = "/";
+
+	const char *ToOutputPtr = NULL;
+	size_t ToOutputLen = 0;
+
+	/* absolute aka starts with a slash */
+	if (! gs_nix_path_is_absolute(path))
+		throw std::FilesysExc("path not absolute");
+
+	/* eat trailing slashes */
+
+	path = gs_nix_path_eat_trailing_slashes(path);
+
+	if (path.size() > 0) {
+		/* because of ensure absolute we know it starts with a slash.
+		*  since eat_trailing_slashes did not eat the whole path,
+		*  what remains must be of the form "/XXX(/XXX)*" (regex).
+		*  there might be redundant slashes. */
+		/* eat an XXX part */
+		path = gs_nix_path_eat_trailing_nonslashes(path);
+		/* eat an / part */
+		path = gs_nix_path_eat_trailing_slashes(path);
+		/* two possibilities: we were on the last /XXX part or not.
+		*  path is now empty or of the form /XXX */
+	}
+
+	if (path.size() == 0) {
+		/* handle the 'path is now empty' possibility: output just /, as per dirname(3) */
+		return std::string("/");
+	}
+	else {
+		/* handle the 'path is now of the form /XXX' possibility: output verbatim */
+		return path;
+	}
+}
+
+std::string path_append_abs_rel(
+	std::string absolute,
+	std::string relative)
+{
+	if (! gs_nix_path_is_absolute(absolute))
+		throw std::FilesysExc("path not absolute");
+
+	if (gs_nix_path_is_absolute(relative))
+		throw std::FilesysExc("path absolute");
+
+	std::string ret;
+
+	ret.reserve(512);
+	ret.append(absolute);
+	gs_nix_path_add_trailing_slash_cond_inplace(&ret);
+	ret.append(relative);
+
+	return ret;
+}
+
+void rename_file_file(
+	std::string src_filename,
+	std::string dst_filename)
+{
+	/* see renameat2(2) for call with extra flags (eg RENAME_EXCHANGE) */
+	if (rename(src_filename.c_str(), dst_filename.c_str()) < 0)
+		throw FilesysExc("rename");
+}
+
+void directory_create_unless_exist(std::string dirname)
+{
+	/* 0777 aka default for linux - remember umask applies */
+	mode_t mode = S_IRUSR | S_IWUSR | S_IXUSR |
+		S_IRGRP | S_IWGRP | S_IXGRP |
+		S_IROTH | S_IWOTH | S_IXOTH;
+	
+	if (mkdir(dirname.c_str(), mode) < 0) {
+		if (errno == EEXIST)
+			return;
+		throw std::FilesysExc("mkdir");
+	}
+}
+
+#endif /* _WIN32 */
 
 }

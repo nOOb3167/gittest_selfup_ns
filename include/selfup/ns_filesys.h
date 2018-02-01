@@ -23,11 +23,6 @@ std::string build_modified_filename(
 	std::string replacement_suffix,
 	std::string replacement_extension);
 
-std::string path_directory(std::string path);
-std::string path_append_abs_rel(
-	std::string absolute,
-	std::string relative);
-
 std::string file_read(
 	std::string filename);
 void file_write_frombuffer(
@@ -35,8 +30,14 @@ void file_write_frombuffer(
 	const char *buf, size_t buf_len);
 
 std::string current_executable_relative_filename(std::string relative);
-std::string current_executable_filename();
 std::string current_executable_directory();
+
+std::string current_executable_filename();
+
+std::string path_directory(std::string path);
+std::string path_append_abs_rel(
+	std::string absolute,
+	std::string relative);
 
 void rename_file_file(
 	std::string src_filename,
