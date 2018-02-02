@@ -769,14 +769,18 @@ void selfup_start_crank(Address addr)
 
 int main(int argc, char **argv)
 {
+	tcpthreaded_startup_helper();
+
 	if (git_libgit2_init() < 0)
 		throw std::runtime_error("libgit2 init");
 
-	tcpthreaded_startup_helper();
+	ns_gui::GuiCtx::initGlobal();
+	g_gui_ctx->start();
+
 	selfup_start_crank(Address(AF_INET, 6757, 0x7F000001, address_ipv4_tag_t()));
 	selfup_start_mainupdate_crank(Address(AF_INET, 6757, 0x7F000001, address_ipv4_tag_t()));
 
-	ns_gui::gui_run();
+	g_gui_ctx->join();
 
 	return EXIT_SUCCESS;
 }

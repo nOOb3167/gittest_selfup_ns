@@ -87,8 +87,8 @@ unique_ptr_hbitmap win_bitmap_from_rgb(
 
 	std::string tmpbuf(width * height * 4, '\0');
 
-	for (size_t y = 0; y < height; y++)
-		for (size_t x = 0; x < width; x++) {
+	for (int y = 0; y < height; y++)
+		for (int x = 0; x < width; x++) {
 			tmpbuf[width * 4 * y + 4 * x + 0] = img_data_buf[width * 3 * y + 3 * x + 0];
 			tmpbuf[width * 4 * y + 4 * x + 1] = img_data_buf[width * 3 * y + 3 * x + 1];
 			tmpbuf[width * 4 * y + 4 * x + 2] = img_data_buf[width * 3 * y + 3 * x + 2];
@@ -281,8 +281,6 @@ void win_threadfunc()
 	BOOL ret = 0;
 	MSG msg = {};
 
-	std::unique_ptr<GuiProgress> progress(new GuiProgress());
-
 	/* NOTE: beware GetModuleHandle(NULL) caveat when called from DLL (should not apply here though) */
 	if (!(hinstance = GetModuleHandle(NULL)))
 		throw std::runtime_error("win get module handle");
@@ -342,7 +340,9 @@ void win_threadfunc()
 
 			win_clear_window(hdc->hwnd, hdc->hdc);
 
-			switch (progress->m_mode)
+			std::unique_lock<std::mutex> lock(g_gui_ctx->getMutex());
+
+			switch (g_gui_ctx->getProgress().m_mode)
 			{
 			case 0:
 			{
@@ -351,7 +351,7 @@ void win_threadfunc()
 					&img_pb_empty,
 					&img_pb_full,
 					0, 32,
-					progress->m_ratio_a, progress->m_ratio_b);
+					g_gui_ctx->getProgress().m_ratio_a, g_gui_ctx->getProgress().m_ratio_b);
 
 				std::string s("hElLo world");
 				TextOut(hdc->hdc, 64, 64, s.c_str(), s.size());
@@ -365,7 +365,7 @@ void win_threadfunc()
 					&img_pb_empty,
 					&img_pb_blip,
 					0, 96,
-					progress->m_blip_cnt);
+					g_gui_ctx->getProgress().m_blip_cnt);
 			}
 			break;
 
@@ -378,9 +378,9 @@ void win_threadfunc()
 	}
 }
 
-void gui_run()
-{
-	win_threadfunc();
 }
 
+void gui_run()
+{
+	ns_gui::win_threadfunc();
 }
