@@ -38,6 +38,7 @@ struct DeleteHdcData
 
 typedef ::std::unique_ptr<HBITMAP, void(*)(HBITMAP *)> unique_ptr_hbitmap;
 typedef ::std::unique_ptr<DeleteHdcData, void(*)(DeleteHdcData *)> unique_ptr_hdc;
+typedef ::std::unique_ptr<WNDCLASSEX, void(*)(WNDCLASSEX *)> unique_ptr_wndclassex;
 
 void deleteHBitmap(HBITMAP *p)
 {
@@ -49,6 +50,14 @@ void deleteHdc(DeleteHdcData *p)
 {
 	if (p) {
 		ReleaseDC(p->hwnd, p->hdc);
+		delete p;
+	}
+}
+
+void deleteWndclassex(WNDCLASSEX *p)
+{
+	if (p) {
+		UnregisterClass(p->lpszClassName, p->hInstance);
 		delete p;
 	}
 }
@@ -264,6 +273,13 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam)
 	}
 	break;
 
+	case WM_DESTROY:
+	{
+		/* https://msdn.microsoft.com/en-us/library/windows/desktop/ms632598(v=vs.85).aspx#destroying_win */
+		PostQuitMessage(0);
+	}
+	break;
+
 	default:
 		return DefWindowProc(hwnd, msg, wparam, lparam);
 	}
@@ -276,32 +292,32 @@ void win_threadfunc()
 
 	HINSTANCE hinstance = NULL;
 
-	WNDCLASSEX wc = {};
 	HWND hwnd = 0;
 	BOOL ret = 0;
 	MSG msg = {};
 
 	/* NOTE: beware GetModuleHandle(NULL) caveat when called from DLL (should not apply here though) */
-	if (!(hinstance = GetModuleHandle(NULL)))
+	if (! (hinstance = GetModuleHandle(NULL)))
 		throw std::runtime_error("win get module handle");
 
-	wc.cbSize = sizeof(WNDCLASSEX);
-	wc.style = 0;
-	wc.lpfnWndProc = WndProc;
-	wc.cbClsExtra = 0;
-	wc.cbWndExtra = 0;
-	wc.hInstance = hinstance;
-	wc.hIcon = LoadIcon(NULL, IDI_APPLICATION);
-	wc.hCursor = LoadCursor(NULL, IDC_ARROW);
-	wc.hbrBackground = (HBRUSH)(COLOR_WINDOW + 1);
-	wc.lpszMenuName = NULL;
-	wc.lpszClassName = GsGuiWinClassName;
-	wc.hIconSm = LoadIcon(NULL, IDI_APPLICATION);
+	unique_ptr_wndclassex wc(new WNDCLASSEX(), deleteWndclassex);
+	wc->cbSize = sizeof(WNDCLASSEX);
+	wc->style = 0;
+	wc->lpfnWndProc = WndProc;
+	wc->cbClsExtra = 0;
+	wc->cbWndExtra = 0;
+	wc->hInstance = hinstance;
+	wc->hIcon = LoadIcon(NULL, IDI_APPLICATION);
+	wc->hCursor = LoadCursor(NULL, IDC_ARROW);
+	wc->hbrBackground = (HBRUSH)(COLOR_WINDOW + 1);
+	wc->lpszMenuName = NULL;
+	wc->lpszClassName = GsGuiWinClassName;
+	wc->hIconSm = LoadIcon(NULL, IDI_APPLICATION);
 
-	if (!RegisterClassEx(&wc))
+	if (! RegisterClassEx(wc.get()))
 		throw std::runtime_error("win register class ex");
 
-	if (!(hwnd = CreateWindowEx(
+	if (! (hwnd = CreateWindowEx(
 		WS_EX_CLIENTEDGE,
 		GsGuiWinClassName,
 		GsGuiWinWindowName,
@@ -328,12 +344,12 @@ void win_threadfunc()
 
 		while (PeekMessage(&msg, NULL, 0, 0, PM_REMOVE))
 		{
+			if (msg.message == WM_QUIT)
+				goto label_done;
+
 			TranslateMessage(&msg);
 			DispatchMessage(&msg);
 		}
-
-		//if (!!(r = gs_gui_progress_update(Progress)))
-		//	GS_GOTO_CLEAN();
 
 		{
 			unique_ptr_hdc hdc(new DeleteHdcData(hwnd, GetDC(hwnd)), deleteHdc);
@@ -376,6 +392,8 @@ void win_threadfunc()
 
 		std::this_thread::sleep_until(timepoint_start + std::chrono::milliseconds(frame_duration_ms));
 	}
+label_done:
+	return;
 }
 
 }
