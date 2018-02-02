@@ -16,6 +16,7 @@
 
 #include <selfup/NetworkPacket.h>
 #include <selfup/ns_filesys.h>
+#include <selfup/ns_gui.h>
 #include <selfup/ns_helpers.h>
 #include <selfup/TCPAsync.h>
 
@@ -774,6 +775,8 @@ int main(int argc, char **argv)
 	tcpthreaded_startup_helper();
 	selfup_start_crank(Address(AF_INET, 6757, 0x7F000001, address_ipv4_tag_t()));
 	selfup_start_mainupdate_crank(Address(AF_INET, 6757, 0x7F000001, address_ipv4_tag_t()));
+
+	ns_gui::gui_run();
 
 	return EXIT_SUCCESS;
 }

@@ -1,6 +1,7 @@
 #ifndef _NS_GUI_
 #define _NS_GUI_
 
+#include <mutex>
 #include <string>
 
 #define GS_GUI_FRAMERATE 30
@@ -39,18 +40,34 @@ public:
 		m_blip_cnt(-1)
 	{}
 
+	void progressSetRatio(int ratio_a, int ratio_b)
+	{
+		m_mode = 0;
+		m_ratio_a = ratio_a;
+		m_ratio_b = ratio_b;
+	}
+
+public:
 	int m_mode; /* 0:ratio 1:blip */
 	int m_ratio_a, m_ratio_b;
 	int m_blip_val_old, m_blip_val, m_blip_cnt;
 };
 
+/* gui_run needs implementing per-platform */
+void gui_run();
+
 AuxImg readimage_data(const std::string & filename, const std::string & data);
 AuxImg readimage_file(const std::string & filename);
 AuxImg readimage_hex(const std::string & filename, const std::string & hex);
+
 void progress_blip_calc(
 	int blip_cnt,
 	int img_pb_empty_width, int img_pb_blip_width,
 	int * o_src_x, int * o_draw_left, int * o_draw_width);
+void progress_init_global();
+std::mutex & progress_get_mutex_global();
+
+extern GuiProgress *g_gui_progress;
 
 }
 

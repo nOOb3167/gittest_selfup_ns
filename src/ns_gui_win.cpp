@@ -352,6 +352,9 @@ void win_threadfunc()
 					&img_pb_full,
 					0, 32,
 					progress->m_ratio_a, progress->m_ratio_b);
+
+				std::string s("hElLo world");
+				TextOut(hdc->hdc, 64, 64, s.c_str(), s.size());
 			}
 			break;
 
@@ -375,7 +378,7 @@ void win_threadfunc()
 	}
 }
 
-void gs_gui_run()
+void gui_run()
 {
 	win_threadfunc();
 }

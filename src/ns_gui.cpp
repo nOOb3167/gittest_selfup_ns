@@ -1,6 +1,7 @@
 #include <cstddef>
 #include <cstdio>
 
+#include <mutex>
 #include <vector>
 #include <string>
 #include <fstream>
@@ -12,6 +13,9 @@
 
 namespace ns_gui
 {
+
+std::mutex   g_gui_progress_mutex;
+GuiProgress *g_gui_progress = NULL;
 
 AuxImg readimage_data(const std::string &filename, const std::string &data)
 {
@@ -85,6 +89,19 @@ void progress_blip_calc(
 		*o_draw_left = draw_left;
 	if (o_draw_width)
 		*o_draw_width = draw_width;
+}
+
+void progress_init_global()
+{
+	std::lock_guard<std::mutex> lock(g_gui_progress_mutex);
+	if (g_gui_progress)
+		throw std::runtime_error("progress global");
+	g_gui_progress = new GuiProgress();
+}
+
+std::mutex & progress_get_mutex_global()
+{
+	return g_gui_progress_mutex;
 }
 
 }
