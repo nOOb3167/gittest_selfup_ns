@@ -251,6 +251,15 @@ void win_draw_progress_blip(
   win_drawimage_mask_b(hdc, GS_GUI_COLOR_MASK_RGB, img_pb_empty, 0, 0, img_pb_empty->m_width, img_pb_empty->m_height, dst_x, dst_y);
 }
 
+void win_draw_progress_status(
+	HDC hdc,
+	int dst_x, int dst_y,
+	const std::string &msg)
+{
+	if (! TextOut(hdc, dst_x, dst_y, msg.c_str(), msg.size()))
+		throw std::runtime_error("win text out");
+}
+
 LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam)
 {
 	switch (msg)
@@ -368,9 +377,6 @@ void win_threadfunc()
 					&img_pb_full,
 					0, 32,
 					g_gui_ctx->getProgress().m_ratio_a, g_gui_ctx->getProgress().m_ratio_b);
-
-				std::string s("hElLo world");
-				TextOut(hdc->hdc, 64, 64, s.c_str(), s.size());
 			}
 			break;
 
@@ -388,6 +394,8 @@ void win_threadfunc()
 			default:
 				assert(0);
 			}
+
+			win_draw_progress_status(hdc->hdc, 4, 64, g_gui_ctx->getProgress().m_status);
 		}
 
 		std::this_thread::sleep_until(timepoint_start + std::chrono::milliseconds(frame_duration_ms));

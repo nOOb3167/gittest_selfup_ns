@@ -777,9 +777,8 @@ int main(int argc, char **argv)
 	ns_gui::GuiCtx::initGlobal();
 	g_gui_ctx->start();
 
-	std::unique_lock<std::mutex> lock(g_gui_ctx->getMutex());
-	g_gui_ctx->getProgress().progressModeRatio(3, 5);
-	lock.unlock();
+	NS_GUI_MODE_RATIO(3, 5);
+	NS_GUI_STATUS("hello world");
 
 	selfup_start_crank(Address(AF_INET, 6757, 0x7F000001, address_ipv4_tag_t()));
 	selfup_start_mainupdate_crank(Address(AF_INET, 6757, 0x7F000001, address_ipv4_tag_t()));

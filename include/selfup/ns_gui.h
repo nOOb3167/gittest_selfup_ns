@@ -12,6 +12,13 @@
 #define GS_GUI_COLOR_MASK_RGB 0x00FF00
 #define GS_GUI_COLOR_MASK_BGR 0x00FF00
 
+#define NS_AUX_LOCK() std::lock_guard<std::mutex> lock(g_gui_ctx->getMutex())
+#define NS_AUX_PRGS() (g_gui_ctx->getProgress())
+
+#define NS_GUI_MODE_RATIO(a, b) do { NS_AUX_LOCK(); NS_AUX_PRGS().progressModeRatio(a, b); } while(0)
+#define NS_GUI_MODE_BLIP()      do { NS_AUX_LOCK(); NS_AUX_PRGS().progressModeBlipAndIncrement(); } while (0)
+#define NS_GUI_STATUS(msg)         do { NS_AUX_LOCK(); NS_AUX_PRGS().progressSetStatus(msg); } while (0)
+
 namespace ns_gui { class GuiCtx; }
 extern std::unique_ptr<ns_gui::GuiCtx> g_gui_ctx;
 
