@@ -322,6 +322,8 @@ public:
 	{
 		unique_ptr_gitrepository memory_repository(selfup_git_memory_repository_new(), deleteGitrepository);
 
+		NS_GUI_STATUS("selfup net latest request");
+
 		NetworkPacket packet_req_latest(SELFUP_CMD_REQUEST_LATEST_SELFUPDATE_BLOB, networkpacket_cmd_tag_t());
 		packet_req_latest << (uint32_t) m_ext->m_refname.size();
 		packet_req_latest.outSizedStr(m_ext->m_refname.data(), m_ext->m_refname.size());
@@ -329,8 +331,11 @@ public:
 
 		NetworkPacket res_latest_pkt = m_respond->waitFrame();
 		readEnsureCmd(&res_latest_pkt, SELFUP_CMD_RESPONSE_LATEST_SELFUPDATE_BLOB);
+		NS_GUI_STATUS("selfup net latest response");
 		git_oid res_latest_oid = {};
 		git_oid_fromraw(&res_latest_oid, (const unsigned char *) res_latest_pkt.inSizedStr(GIT_OID_RAWSZ));
+
+		NS_GUI_STATUS("selfup net hash");
 
 		git_oid oid_cur_exe = {};
 		/* empty as_path parameter means no filters applied */
@@ -340,7 +345,11 @@ public:
 		if (git_oid_cmp(&oid_cur_exe, &res_latest_oid) == 0)
 			return;
 
+		NS_GUI_STATUS("selfup net objs request");
+
 		requestAndRecvAndWriteObj(memory_repository.get(), res_latest_oid);
+
+		NS_GUI_STATUS("selfup net objs updatebuf");
 
 		unique_ptr_gitblob blob(selfup_git_blob_lookup(memory_repository.get(), &res_latest_oid), deleteGitblob);
 
@@ -355,6 +364,8 @@ public:
 	{
 		/* REQ_OBJS3 */
 
+		NS_GUI_STATUS("selfup net objs req");
+
 		NetworkPacket req_obj_pkt(SELFUP_CMD_REQUEST_OBJS3, networkpacket_cmd_tag_t());
 		req_obj_pkt << (uint32_t) 1;
 		req_obj_pkt.outSizedStr((char *) missing_obj_oid.id, GIT_OID_RAWSZ);
@@ -364,6 +375,7 @@ public:
 
 		NetworkPacket res_obj_pkt = m_respond->waitFrame();
 		readEnsureCmd(&res_obj_pkt, SELFUP_CMD_RESPONSE_OBJS3);
+		NS_GUI_STATUS("selfup net objs res");
 		uint32_t res_obj_blen = 0;
 		res_obj_pkt >> res_obj_blen;
 
@@ -378,6 +390,8 @@ public:
 		// FIXME: legacy memes_inflate (as opposed to ns_git::read_object) appends trailing zero so -1
 		assert(inflated_offset + inflated_size == inflated.size - 1);
 
+		NS_GUI_STATUS("selfup net objs write");
+
 		git_oid written_oid = {};
 		if (!! git_blob_create_frombuffer(&written_oid, memory_repository, inflated.ptr + inflated_offset, inflated_size))
 			throw std::runtime_error("blob create from buffer");
@@ -388,6 +402,7 @@ public:
 
 		NetworkPacket res_obj_done_pkt = m_respond->waitFrame();
 		readEnsureCmd(&res_obj_done_pkt, SELFUP_CMD_RESPONSE_OBJS3_DONE);
+		NS_GUI_STATUS("selfup net objs done");
 	}
 
 private:
@@ -430,6 +445,8 @@ public:
 
 		/* request latest version git_oid */
 
+		NS_GUI_STATUS("mainup net latest request");
+
 		NetworkPacket packet_req_latest(SELFUP_CMD_REQUEST_LATEST_COMMIT_TREE, networkpacket_cmd_tag_t());
 		packet_req_latest << (uint32_t) m_ext->m_refname.size();
 		packet_req_latest.outSizedStr(m_ext->m_refname.data(), m_ext->m_refname.size());
@@ -437,10 +454,13 @@ public:
 
 		NetworkPacket res_latest_pkt = m_respond->waitFrame();
 		readEnsureCmd(&res_latest_pkt, SELFUP_CMD_RESPONSE_LATEST_COMMIT_TREE);
+		NS_GUI_STATUS("mainup net latest response");
 		git_oid res_latest_oid = {};
 		git_oid_fromraw(&res_latest_oid, (const unsigned char *) res_latest_pkt.inSizedStr(GIT_OID_RAWSZ));
 
 		/* determine local version git_oid - defaults to zeroed-out */
+
+		NS_GUI_STATUS("mainup net headtree");
 
 		git_oid repo_head_tree_oid = getHeadTree(repo.get(), m_ext->m_refname);
 
@@ -451,12 +471,15 @@ public:
 
 		/* request list of trees comprising latest version */
 
+		NS_GUI_STATUS("mainup net treelist request");
+
 		NetworkPacket req_treelist_pkt(SELFUP_CMD_REQUEST_TREELIST, networkpacket_cmd_tag_t());
 		req_treelist_pkt.outSizedStr((char *) res_latest_oid.id, GIT_OID_RAWSZ);
 		m_respond->respondOneshot(std::move(req_treelist_pkt));
 
 		NetworkPacket res_treelist_pkt = m_respond->waitFrame();
 		readEnsureCmd(&res_treelist_pkt, SELFUP_CMD_RESPONSE_TREELIST);
+		NS_GUI_STATUS("mainup net treelist response");
 		uint32_t res_treelist_treenum = 0;
 		std::vector<git_oid> res_treelist_treevec;
 		res_treelist_pkt >> res_treelist_treenum;
@@ -467,6 +490,8 @@ public:
 		}
 
 		/* determine which trees are missing */
+
+		NS_GUI_STATUS("mainup net missing tree determine");
 
 		std::deque<git_oid> missing_tree_oids;
 		for (size_t i = 0; i < res_treelist_treevec.size(); i++) {
@@ -481,6 +506,8 @@ public:
 
 		/* request missing trees and write received into the repository */
 
+		NS_GUI_STATUS("mainup net missing tree obtain");
+
 		requestAndRecvAndWriteObjs(repo.get(), &missing_tree_oids);
 
 		/* determine which blobs are missing - validating trees and their entries in the meantime */
@@ -491,6 +518,8 @@ public:
 			 - examining the trees' entries:
 			   - tree entries for existence
 			   - blob entries for existence, recording missing blobs */
+
+		NS_GUI_STATUS("mainup net missing blob determine");
 
 		std::deque<git_oid> missing_blob_oids;
 
@@ -516,12 +545,16 @@ public:
 
 		/* request missing blobs and write received into the repository */
 
+		NS_GUI_STATUS("mainup net missing blob obtain");
+
 		requestAndRecvAndWriteObjs(repo.get(), &missing_blob_oids);
 
 		/* by now all required blobs should of been either preexistent or missing but written into the repository */
 
 		/* required trees were confirmed present above and required blobs are present within the repository.
 		   supposedly we have correctly received a full update. */
+
+		NS_GUI_STATUS("mainup net commit and setref");
 
 		git_oid new_commit_oid = writeCommitDummy(repo.get(), res_latest_oid);
 		unique_ptr_gitreference new_ref(selfup_git_reference_create_and_force_set(repo.get(), m_ext->m_refname, new_commit_oid), deleteGitreference);
@@ -582,6 +615,8 @@ public:
 	{
 		size_t missing_obj_request_limit = missing_obj_oids->size();
 		do {
+			NS_GUI_STATUS("mainup net objs req");
+
 			NetworkPacket req_objs(SELFUP_CMD_REQUEST_OBJS3, networkpacket_cmd_tag_t());
 			req_objs << (uint32_t) missing_obj_request_limit;
 			for (size_t i = 0; i < missing_obj_request_limit; i++)
@@ -589,6 +624,8 @@ public:
 			m_respond->respondOneshot(std::move(req_objs));
 
 			std::vector<git_oid> received_obj_oids = recvAndWriteObjsUntilDone(repo);
+
+			NS_GUI_STATUS("mainup net objs chk");
 
 			for (size_t i = 0; i < received_obj_oids.size(); i++) {
 				if (missing_obj_oids->empty() || git_oid_cmp(&received_obj_oids[i], &missing_obj_oids->front()) != 0)
@@ -607,6 +644,7 @@ public:
 		while (true) {
 			NetworkPacket res_blobs = m_respond->waitFrame();
 			uint8_t res_blobs_cmd = readGetCmd(&res_blobs);
+			NS_GUI_STATUS("mainup net objs res");
 			if (res_blobs_cmd == SELFUP_CMD_RESPONSE_OBJS3) {
 				uint32_t size = 0;
 				res_blobs >> size;
@@ -620,6 +658,7 @@ public:
 					throw std::runtime_error("inflate type");
 				// FIXME: legacy memes_inflate (as opposed to ns_git::read_object) appends trailing zero so -1
 				assert(inflated_offset + inflated_size == inflated.size - 1);
+				NS_GUI_STATUS("mainup net objs write");
 				// FIXME: compute and check hash before writing?
 				//        see git_odb_hash
 				git_oid written_oid = {};
@@ -628,6 +667,7 @@ public:
 				received_blob_oids.push_back(written_oid);
 			}
 			else if (res_blobs_cmd == SELFUP_CMD_RESPONSE_OBJS3_DONE) {
+				NS_GUI_STATUS("mainup net objs done");
 				break;
 			}
 			else {
@@ -672,11 +712,15 @@ void selfup_checkout(std::string repopath, std::string refname, std::string chec
 
 	git_oid commit_head_oid = {};
 
+	NS_GUI_STATUS("mainup checkout ref and tree");
+
 	if (!! git_reference_name_to_id(&commit_head_oid, repo.get(), refname.c_str()))
 		throw std::runtime_error("refname id");
 
 	unique_ptr_gitcommit commit_head(selfup_git_commit_lookup(repo.get(), &commit_head_oid), deleteGitcommit);
 	unique_ptr_gittree   commit_tree(selfup_git_commit_tree(commit_head.get()), deleteGittree);
+
+	NS_GUI_STATUS("mainup checkout makedir");
 
 	ns_filesys::directory_create_unless_exist(checkoutpath);
 
@@ -688,6 +732,8 @@ void selfup_checkout(std::string repopath, std::string refname, std::string chec
 
 	opts.disable_filters = 1;
 	opts.target_directory = checkoutpath.c_str();
+
+	NS_GUI_STATUS("mainup checkout tree");
 
 	/* https://libgit2.github.com/docs/guides/101-samples/#objects_casting */
 	if (!! git_checkout_tree(repo.get(), (git_object *) commit_tree.get(), &opts))
@@ -731,10 +777,19 @@ void selfup_start_mainupdate_crank(Address addr)
 	selfup_ensure_repository(repopath, ".git");
 	std::shared_ptr<SelfupConExt2> ext(new SelfupConExt2(repopath, refname));
 	std::unique_ptr<SelfupWork2> work(new SelfupWork2(addr, ext));
+
+	NS_GUI_STATUS("mainup net start");
+
 	work->start();
 	work->join();
 
+	NS_GUI_STATUS("mainup net end");
+
+	NS_GUI_STATUS("mainup checkout start");
+
 	selfup_checkout(repopath, refname, checkoutpath);
+
+	NS_GUI_STATUS("mainup checkout end");
 }
 
 void selfup_start_crank(Address addr)
@@ -743,28 +798,44 @@ void selfup_start_crank(Address addr)
 	std::shared_ptr<SelfupConExt1> ext(new SelfupConExt1(cur_exe_filename, "refs/heads/selfup"));
 	std::unique_ptr<SelfupWork1> work(new SelfupWork1(addr, ext));
 
+	NS_GUI_STATUS("selfup net start");
+
 	work->start();
 	work->join();
 
+	NS_GUI_STATUS("selfup net end");
+
 	if (! ext->m_update_have)
 		return;
+
+	NS_GUI_STATUS("selfup filesys start");
 
 	std::string temp_filename = ns_filesys::build_modified_filename(
 		cur_exe_filename, "", ".exe", "_helper", ".exe");
 	std::string old_filename = ns_filesys::build_modified_filename(
 		cur_exe_filename, "", ".exe", "_helper_old", ".exe");
 
-	ns_filesys::file_write_frombuffer(temp_filename, ext->m_update_buffer->data(), ext->m_update_buffer->size());
-
 	if (g_selfup_selfupdate_skip_fileops)
 		return;
 
+	NS_GUI_STATUS("selfup filesys write");
+
+	ns_filesys::file_write_frombuffer(temp_filename, ext->m_update_buffer->data(), ext->m_update_buffer->size());
+
+	NS_GUI_STATUS("selfup filesys dryrun");
+
 	selfup_dryrun(temp_filename);
+
+	NS_GUI_STATUS("selfup filesys rename");
 
 	ns_filesys::rename_file_file(cur_exe_filename, old_filename);
 	ns_filesys::rename_file_file(temp_filename, cur_exe_filename);
 
+	NS_GUI_STATUS("selfup filesys reexec");
+
 	selfup_reexec_probably_blocking(cur_exe_filename);
+
+	NS_GUI_STATUS("selfup filesys end");
 }
 
 int main(int argc, char **argv)
@@ -777,13 +848,14 @@ int main(int argc, char **argv)
 	ns_gui::GuiCtx::initGlobal();
 	g_gui_ctx->start();
 
-	NS_GUI_MODE_RATIO(3, 5);
-	NS_GUI_STATUS("hello world");
+	NS_GUI_STATUS("startup");
 
 	selfup_start_crank(Address(AF_INET, 6757, 0x7F000001, address_ipv4_tag_t()));
 	selfup_start_mainupdate_crank(Address(AF_INET, 6757, 0x7F000001, address_ipv4_tag_t()));
 
 	g_gui_ctx->join();
+
+	NS_GUI_STATUS("shutdown");
 
 	return EXIT_SUCCESS;
 }
