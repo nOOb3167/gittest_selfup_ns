@@ -778,7 +778,7 @@ int main(int argc, char **argv)
 	g_gui_ctx->start();
 
 	std::unique_lock<std::mutex> lock(g_gui_ctx->getMutex());
-	g_gui_ctx->getProgress().progressSetRatio(3, 5);
+	g_gui_ctx->getProgress().progressModeRatio(3, 5);
 	lock.unlock();
 
 	selfup_start_crank(Address(AF_INET, 6757, 0x7F000001, address_ipv4_tag_t()));

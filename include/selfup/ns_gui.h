@@ -44,22 +44,34 @@ public:
 		m_mode(0),
 		m_ratio_a(0),
 		m_ratio_b(0),
-		m_blip_val_old(0),
-		m_blip_val(0),
-		m_blip_cnt(-1)
+		m_blip_cnt(-1),
+		m_status()
 	{}
 
-	void progressSetRatio(int ratio_a, int ratio_b)
+	void progressModeRatio(int ratio_a, int ratio_b)
 	{
 		m_mode = 0;
 		m_ratio_a = ratio_a;
 		m_ratio_b = ratio_b;
 	}
 
+	void progressModeBlipAndIncrement()
+	{
+		m_mode = 1;
+		m_blip_cnt += 1;
+	}
+
+	void progressSetStatus(const std::string &status)
+	{
+		m_status = status;
+	}
+
 public:
 	int m_mode; /* 0:ratio 1:blip */
 	int m_ratio_a, m_ratio_b;
-	int m_blip_val_old, m_blip_val, m_blip_cnt;
+	size_t m_blip_cnt;
+
+	std::string m_status;
 };
 
 class GuiCtx
