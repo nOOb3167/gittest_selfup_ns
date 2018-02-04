@@ -30,6 +30,8 @@
 
 #define NS_STATUS(cstr) do { NS_LOG_SZ(cstr, strlen(cstr)); NS_GUI_STATUS(cstr); } while (0);
 
+#define NS_LOGDUMP(addr, magic) do { NS_LOG_LOCK(); TCPLogDump::dump((addr), (magic), g_log->getBuf().data(), g_log->getBuf().size()); } while (0);
+
 typedef ::std::unique_ptr<git_repository, void(*)(git_repository *)> unique_ptr_gitrepository;
 typedef ::std::unique_ptr<git_blob, void(*)(git_blob *)> unique_ptr_gitblob;
 typedef ::std::unique_ptr<git_commit, void(*)(git_commit *)> unique_ptr_gitcommit;
@@ -854,12 +856,16 @@ int main(int argc, char **argv)
 
 	NS_STATUS("startup");
 
-	selfup_start_crank(Address(AF_INET, 6757, 0x7F000001, address_ipv4_tag_t()));
-	selfup_start_mainupdate_crank(Address(AF_INET, 6757, 0x7F000001, address_ipv4_tag_t()));
+	Address addr(AF_INET, 6757, 0x7F000001, address_ipv4_tag_t());
+
+	selfup_start_crank(addr);
+	selfup_start_mainupdate_crank(addr);
 
 	g_gui_ctx->join();
 
 	NS_STATUS("shutdown");
+
+	NS_LOGDUMP(addr, 0x04030201);
 
 	return EXIT_SUCCESS;
 }

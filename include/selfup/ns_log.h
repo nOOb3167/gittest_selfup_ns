@@ -19,6 +19,7 @@ public:
 	NsLog();
 
 	std::mutex & getMutex() { return m_mutex; }
+	std::string & getBuf() { return m_buf; }
 
 	void logSimple(const char *msg, size_t msg_len);
 
