@@ -1,3 +1,4 @@
+#include <cstdio>
 #include <fstream>
 #include <sstream>
 #include <string>
@@ -12,7 +13,10 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #else
-#  error implement
+#include <fcntl.h>
+#include <unistd.h>
+#include <sys/stat.h>
+#include <sys/types.h>
 #endif
 
 #include <selfup/ns_filesys.h>
@@ -227,8 +231,8 @@ static std::string gs_nix_path_eat_trailing_nonslashes(const std::string &path)
 
 static void gs_nix_path_add_trailing_slash_cond_inplace(std::string *io_path)
 {
-	if (! (io_path.size() > 0 && io_path[io_path.size() - 1] == '/'))
-		io_path.append(1, '/');
+	if (! (io_path->size() > 0 && (*io_path)[io_path->size() - 1] == '/'))
+		io_path->append(1, '/');
 }
 
 std::string current_executable_filename()
@@ -248,16 +252,16 @@ std::string current_executable_filename()
 
 	ssize_t count = 0;
 
-	if ((count = readlink(MAGIC_PROC_PATH_NAME, ret.data(), ret.size())) < 0)
-		throw std::FilesysExc("readlink");
+	if ((count = readlink(MAGIC_PROC_PATH_NAME, (char *) ret.data(), ret.size())) < 0)
+		throw FilesysExc("readlink");
 
 	if (count >= ret.size())
-		throw std::FilesysExc("readlink count");
+		throw FilesysExc("readlink count");
 
 	ret.resize(count);
 
-	if (! gs_nix_path_is_absolute(ret)))
-		throw std::FilesysExc("path not absolute");
+	if (! gs_nix_path_is_absolute(ret))
+		throw FilesysExc("path not absolute");
 
 	return ret;
 }
@@ -276,7 +280,7 @@ std::string path_directory(std::string path)
 
 	/* absolute aka starts with a slash */
 	if (! gs_nix_path_is_absolute(path))
-		throw std::FilesysExc("path not absolute");
+		throw FilesysExc("path not absolute");
 
 	/* eat trailing slashes */
 
@@ -310,10 +314,10 @@ std::string path_append_abs_rel(
 	std::string relative)
 {
 	if (! gs_nix_path_is_absolute(absolute))
-		throw std::FilesysExc("path not absolute");
+		throw FilesysExc("path not absolute");
 
 	if (gs_nix_path_is_absolute(relative))
-		throw std::FilesysExc("path absolute");
+		throw FilesysExc("path absolute");
 
 	std::string ret;
 
@@ -340,11 +344,11 @@ void directory_create_unless_exist(std::string dirname)
 	mode_t mode = S_IRUSR | S_IWUSR | S_IXUSR |
 		S_IRGRP | S_IWGRP | S_IXGRP |
 		S_IROTH | S_IWOTH | S_IXOTH;
-	
+
 	if (mkdir(dirname.c_str(), mode) < 0) {
 		if (errno == EEXIST)
 			return;
-		throw std::FilesysExc("mkdir");
+		throw FilesysExc("mkdir");
 	}
 }
 

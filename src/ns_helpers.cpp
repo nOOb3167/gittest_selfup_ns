@@ -1,3 +1,4 @@
+#include <stdexcept>
 #include <string>
 
 #include <selfup/ns_helpers.h>

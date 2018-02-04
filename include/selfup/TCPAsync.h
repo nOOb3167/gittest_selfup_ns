@@ -441,7 +441,7 @@ unique_ptr_fd tcpthreaded_socket_listen_helper(Address addr)
 	sockaddr.sin_addr.s_addr = htonl(addr.getAddr4());
 	if (bind(*sock, (struct sockaddr *) &sockaddr, sizeof sockaddr) < 0)
 		throw std::runtime_error("bind");
-	if (listen(*sock, 5)) < 0)
+	if (listen(*sock, 5) < 0)
 		throw std::runtime_error("listen");
 	return sock;
 }
@@ -527,7 +527,7 @@ void tcpthreaded_blocking_write_helper(int fd, NetworkPacket *packet, size_t aft
 
 	const size_t fsz = packet->getDataSize() + afterpacket_extra_size;
 
-	const uint8_t hdr[9] = { 'F', 'R', 'A', 'M', 'E', (fsz >> 24) & 0xFF, (fsz >> 16) & 0xFF, (fsz >> 8) & 0xFF, (fsz >> 0) & 0xFF };
+	uint8_t hdr[9] = { 'F', 'R', 'A', 'M', 'E', (fsz >> 24) & 0xFF, (fsz >> 16) & 0xFF, (fsz >> 8) & 0xFF, (fsz >> 0) & 0xFF };
 
 	const size_t iov_len = 2;
 	struct iovec iov[2] = {};
@@ -550,7 +550,8 @@ void tcpthreaded_blocking_write_helper(int fd, NetworkPacket *packet, size_t aft
 		size_t iovidx = 0;
 		while (nwritten && iovidx < iov_len) {
 			size_t take = GS_MIN(nwritten, iov[iovidx].iov_len);
-			iov[iovidx].iov_base += take;
+			uint8_t * inc = (uint8_t*) iov[iovidx].iov_base + take;
+			iov[iovidx].iov_base  = inc;
 			iov[iovidx].iov_len  -= take;
 			nwritten -= take;
 			if (iov[iovidx].iov_len == 0)

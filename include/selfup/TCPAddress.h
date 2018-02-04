@@ -14,10 +14,14 @@
 #include <sys/stat.h>
 #else
 #include <arpa/inet.h>
+#include <fcntl.h>
 #include <netinet/in.h>
 #include <sys/time.h>
 #include <sys/types.h>
+#include <sys/sendfile.h>
 #include <sys/socket.h>
+#include <sys/stat.h>
+#include <sys/uio.h>
 #include <unistd.h>
 #endif
 
