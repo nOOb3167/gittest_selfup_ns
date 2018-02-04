@@ -237,6 +237,21 @@ private:
 	std::deque<unique_ptr_fd> m_queue_incoming;
 };
 
+class TCPLogDump
+{
+public:
+	static void dump(Address addr, uint32_t magic, const char *data, size_t data_len)
+	{
+		NetworkPacket packet(SELFUP_CMD_LOGDUMP, networkpacket_cmd_tag_t());
+		packet << magic;
+		packet << (uint32_t) data_len;
+		packet.outSizedStr(data, data_len);
+		unique_ptr_fd sock = tcpthreaded_socket_helper();
+		tcpthreaded_socket_connect_helper(*sock, addr);
+		tcpthreaded_blocking_write_helper(*sock, &packet, 0);
+	}
+};
+
 #ifdef _WIN32
 
 void tcpthreaded_socket_close_helper(int *fd)

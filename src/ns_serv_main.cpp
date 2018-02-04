@@ -1,3 +1,4 @@
+#include <cstdio>
 #include <cstring>
 #include <exception>
 #include <map>
@@ -100,6 +101,26 @@ public:
 
 		switch (id)
 		{
+
+		case SELFUP_CMD_LOGDUMP:
+		{
+			uint32_t magic = 0;
+			uint32_t datanum = 0;
+
+			(*packet) >> magic >> datanum;
+
+			const char *data = packet->inSizedStr(datanum);
+
+			/* FIXME: THANKS DREPPER https://sourceware.org/bugzilla/show_bug.cgi?id=5998 */
+			const char hdr[] = "[logdump]:\n";
+			if (fwrite(hdr, 1, sizeof hdr - 1, stdout) != sizeof hdr - 1)
+				throw std::runtime_error("logdump write hdr");
+			if (fwrite(data, 1, datanum, stdout) != datanum)
+				throw std::runtime_error("logdump write data");
+			if (fflush(stdout) != 0)
+				throw std::runtime_error("logdump write flush");
+		}
+		break;
 
 		case SELFUP_CMD_REQUEST_LATEST_SELFUPDATE_BLOB:
 		{

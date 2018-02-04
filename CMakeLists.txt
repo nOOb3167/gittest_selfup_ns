@@ -28,6 +28,7 @@ SET(SELFUP_NS_HEADERS
 	include/selfup/ns_filesys.h
 	include/selfup/ns_gui.h
 	include/selfup/ns_helpers.h
+	include/selfup/ns_log.h
 	include/selfup/TCPAddress.h
 	include/selfup/TCPAsync.h
 	${CMAKE_BINARY_DIR}/imgpbblip_96_32_.h
