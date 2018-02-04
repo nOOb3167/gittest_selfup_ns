@@ -41,6 +41,7 @@ SET(SELFUP_NS_SOURCES
 	src/ns_gui.cpp
 	src/ns_gui_win.cpp
 	src/ns_helpers.cpp
+	src/ns_log.cpp
 	src/ns_selfup_main.cpp
 )
 
