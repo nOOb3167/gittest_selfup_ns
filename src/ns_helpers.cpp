@@ -64,7 +64,8 @@ std::string decode_hex(const std::string &hex, bool web_programmer_designed_swap
 std::string encode_hex(const std::string &bin, bool web_programmer_designed_swapped_hex_mental_illness)
 {
 	std::string hex;
-	const char chars[] = "0123456789ABCDEF";
+	/* lowercase hex */
+	const char chars[] = "0123456789abcdef";
 	for (size_t i = 0; i < bin.size(); i++) {
 		char first = chars[(bin[i] >> 0) & 0xF];
 		char second = chars[(bin[i] >> 4) & 0xF];
