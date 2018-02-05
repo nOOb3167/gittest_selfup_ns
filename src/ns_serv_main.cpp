@@ -9,6 +9,7 @@
 
 #include <selfup/ns_git_shims.h>
 #include <selfup/ns_helpers.h>
+#include <selfup/ns_systemd.h>
 #include <selfup/TCPAsync.h>
 
 #define SERVUP_THREAD_NUM 1
@@ -86,6 +87,11 @@ public:
 	{
 		m_thrd->setFrameDispatch(std::bind(&ServupWork2::frameDispatch, this, std::placeholders::_1, std::placeholders::_2));
 		m_thrd->startBoth();
+	}
+
+	void startConfirm()
+	{
+		ns_sd_notify(0, "READY=1");
 	}
 
 	void join()
@@ -206,6 +212,7 @@ void servup_start_crank(Address addr)
 	std::shared_ptr<ServupConExt2> ext(new ServupConExt2(repopath));
 	std::unique_ptr<ServupWork2> work(new ServupWork2(addr, SERVUP_THREAD_NUM, ext));
 	work->start();
+	work->startConfirm();
 	work->join();
 }
 

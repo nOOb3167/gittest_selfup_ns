@@ -1,0 +1,9 @@
+[Unit]
+Description=selfup_ns
+After=network.target
+
+[Service]
+Type=notify
+ExecStart=/home/progame/gittest/gittest_selfup_ns/serv_ns.exe
+Restart=on-failure
+RestartSec=5s
