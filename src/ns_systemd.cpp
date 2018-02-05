@@ -1,8 +1,18 @@
-#ifndef _WIN32
+#ifdef _WIN32
+
+#include <string>
+
+void ns_sd_notify(int unset_environment, const std::string &state)
+{
+	/* empty */
+}
+
+#else /* _WIN32 */
 
 #include <cstdlib>
 #include <cstring>
 #include <memory>
+#include <string>
 
 #include <unistd.h>
 #include <sys/socket.h>

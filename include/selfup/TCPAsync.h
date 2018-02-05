@@ -267,7 +267,7 @@ public:
 
 void tcpthreaded_aux_recv(int fd, char *buf, int len)
 {
-	size_t off = 0;
+	int off = 0;
 	while (off < len) {
 		int rcvt = recv(fd, buf + off, len - off, 0);
 		/* https://stackoverflow.com/a/36913250
