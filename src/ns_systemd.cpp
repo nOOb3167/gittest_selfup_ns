@@ -42,7 +42,7 @@ void ns_sd_notify(int unset_environment, const std::string &state)
 
 	std::string en(envptr);
 
-	if ((en[0] != '@' && en[0] != '/') || en[1] == '\0')
+	if (en.size() < 2 || ! (en[0] == '@' || en[0] == '/'))
 		throw std::runtime_error("NOTIFY_SOCKET format");
 
 	/* abstract socket address indicated by starting @ in env var
