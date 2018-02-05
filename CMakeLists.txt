@@ -49,6 +49,7 @@ SET(SERV_NS_HEADERS
 	include/selfup/ns_git_shims.h
 	include/selfup/ns_filesys.h
 	include/selfup/ns_helpers.h
+	include/selfup/ns_systemd.h
 	include/selfup/NetworkPacket.h
 	include/selfup/TCPAddress.h
 	include/selfup/TCPAsync.h
@@ -58,6 +59,7 @@ SET(SERV_NS_SOURCES
 	src/ns_filesys.cpp
 	src/ns_helpers.cpp
 	src/ns_serv_main.cpp
+	src/ns_systemd.cpp
 )
 
 SET(ZLIB_INCLUDE_DIR "-NOTFOUND" CACHE PATH "ZLIB include dir")
