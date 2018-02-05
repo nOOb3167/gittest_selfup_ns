@@ -40,7 +40,6 @@ typedef ::std::unique_ptr<git_odb, void(*)(git_odb *)> unique_ptr_gitodb;
 typedef ::std::unique_ptr<git_signature, void(*)(git_signature *)> unique_ptr_gitsignature;
 typedef ::std::unique_ptr<git_reference, void(*)(git_reference *)> unique_ptr_gitreference;
 
-int g_selfup_disable_timeout = 1;
 int g_selfup_selfupdate_skip_fileops = 1;
 
 void deleteGitrepository(git_repository *p)

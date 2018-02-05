@@ -20,6 +20,9 @@
 
 #define TCPASYNC_FRAME_SIZE_MAX (256 * 1024 * 1024)
 #define TCPASYNC_SENDFILE_COUNT_PARAM 524288
+#define TCPASYNC_ACCEPT_RCVTIMEO_MSEC 30000
+
+int g_tcpasync_disable_timeout = 1;
 
 /* https://msdn.microsoft.com/en-us/library/windows/desktop/ms740516(v=vs.85).aspx */
 typedef ::std::unique_ptr<int, void(*)(int *fd)> unique_ptr_fd;
@@ -36,6 +39,14 @@ void tcpthreaded_blocking_sendfile_helper(int fd, int fdfile, size_t size);
 unique_ptr_fd tcpthreaded_file_open_size_helper(const std::string &filename, size_t *o_size);
 void tcpthreaded_file_close_helper(int *fd);
 void tcpthreaded_startup_helper();
+
+class TimeoutExc : public std::runtime_error
+{
+public:
+	TimeoutExc(const char *msg) :
+		std::runtime_error(msg)
+	{}
+};
 
 class TCPSocket
 {
@@ -254,6 +265,22 @@ public:
 
 #ifdef _WIN32
 
+void tcpthreaded_aux_recv(int fd, char *buf, int len)
+{
+	size_t off = 0;
+	while (off < len) {
+		int rcvt = recv(fd, buf + off, len - off, 0);
+		/* https://stackoverflow.com/a/36913250
+		     wtf does recv actually _return_ WSAETIMEOUT? */
+		/* SO_RCVTIMEO can cause WSAGetLastError WSAETIMEOUT */
+		/* https://msdn.microsoft.com/en-us/library/windows/desktop/ms740476(v=vs.85).aspx
+		     but indeterminate state on WSAETIMEDOUT - therefore no special handling */
+		if (rcvt == 0 || rcvt < 0)
+			throw std::runtime_error("recv rcvt");
+		off += rcvt;
+	}
+}
+
 void tcpthreaded_socket_close_helper(int *fd)
 {
 	if (fd && *fd != INVALID_SOCKET) {
@@ -293,6 +320,11 @@ unique_ptr_fd tcpthreaded_socket_accept_helper(int fd)
 	unique_ptr_fd nsock(new int(accept(fd, (struct sockaddr *) &sockaddr, &socklen)), TCPSocket::deleteFd);
 	if (*nsock < 0)
 		throw std::runtime_error("accept");
+	if (! g_tcpasync_disable_timeout) {
+		int val = TCPASYNC_ACCEPT_RCVTIMEO_MSEC;
+		if (setsockopt(*nsock, SOL_SOCKET, SO_RCVTIMEO, (char *) &val, sizeof val) < 0)
+			throw std::runtime_error("setsockopt");
+	}
 	return nsock;
 }
 
@@ -314,14 +346,11 @@ NetworkPacket tcpthreaded_blocking_read_helper(int fd)
 
 	uint8_t hdr[9] = {};
 
-	int rcvt = recv(fd, (char *) hdr, 9, MSG_WAITALL);
-
-	if (rcvt < 0 || rcvt == 0 || rcvt != 9)
-		throw std::runtime_error("recv rcvt");
+	tcpthreaded_aux_recv(fd, (char *) hdr, 9);
 
 	/* validate */
 
-	if (!!memcmp(hdr, "FRAME", 5))
+	if (!! memcmp(hdr, "FRAME", 5))
 		throw ProtocolExc("frame magic");
 	const uint32_t sz = (hdr[5] << 24) | (hdr[6] << 16) | (hdr[7] << 8) | (hdr[8] << 0);
 
@@ -333,10 +362,7 @@ NetworkPacket tcpthreaded_blocking_read_helper(int fd)
 	std::vector<uint8_t> buf;
 	buf.resize(sz);
 
-	int rcvt2 = recv(fd, (char *) buf.data(), buf.size(), MSG_WAITALL);
-
-	if (rcvt2 < 0 || rcvt2 == 0 || rcvt2 != buf.size())
-		throw std::runtime_error("recv rcvt");
+	tcpthreaded_aux_recv(fd, (char *) buf.data(), buf.size());
 
 	NetworkPacket packet(std::move(buf), networkpacket_vec_steal_tag_t());
 
@@ -370,7 +396,7 @@ void tcpthreaded_blocking_sendfile_helper(int fd, int fdfile, size_t size)
 	int rcvt = _read(fdfile, (char *) buf.data(), buf.size());
 
 	if (rcvt < 0 || rcvt == 0 || rcvt != buf.size())
-		throw std::runtime_error("recv rcvt");
+		throw std::runtime_error("read rcvt");
 
 	int sent = send(fd, buf.data(), buf.size(), 0);
 
@@ -413,6 +439,24 @@ void tcpthreaded_startup_helper()
 }
 
 #else  /* _WIN32 */
+
+void tcpthreaded_aux_recv(int fd, char *buf, int len)
+{
+	size_t off = 0;
+	while (off < len) {
+		int rcvt = -1;
+		while ((rcvt = recv(fd, (char *) buf + off, len - off, 0)) < 0)
+		{
+			/* SO_RCVTIMEO can cause errno EAGAIN or EWOULDBLOCK */
+			if (g_tcpasync_disable_timeout && errno == EAGAIN || errno == EWOULDBLOCK)
+				continue;
+			if (errno == EINTR)
+				continue;
+			throw std::runtime_error("recv rcvt");
+		}
+		off += rcvt;
+	}
+}
 
 void tcpthreaded_socket_close_helper(int *fd)
 {
@@ -458,6 +502,13 @@ unique_ptr_fd tcpthreaded_socket_accept_helper(int fd)
 		throw std::runtime_error("accept");
 	}
 	unique_ptr_fd nsock(new int(ret), TCPSocket::deleteFd);
+	if (! g_tcpasync_disable_timeout) {
+		struct timeval val = {};
+		val.tv_sec = TCPASYNC_ACCEPT_RCVTIMEO_MSEC / 1000;
+		val.tv_usec = (TCPASYNC_ACCEPT_RCVTIMEO_MSEC % 1000) * 1000;
+		if (setsockopt(*nsock, SOL_SOCKET, SO_RCVTIMEO, (char *) &val, sizeof val) < 0)
+			throw std::runtime_error("setsockopt");
+	}
 	return nsock;
 }
 
@@ -484,14 +535,7 @@ NetworkPacket tcpthreaded_blocking_read_helper(int fd)
 
 	uint8_t hdr[9] = {};
 
-	while ((rcvt = recv(fd, (char *) hdr, 9, MSG_WAITALL)) < 0)
-	{
-		if (errno == EINTR)
-			continue;
-		throw std::runtime_error("recv");
-	}
-	if (rcvt == 0)
-		throw std::runtime_error("recv disconnect");
+	tcpthreaded_aux_recv(fd, (char *) hdr, 9);
 
 	/* validate */
 
@@ -507,14 +551,7 @@ NetworkPacket tcpthreaded_blocking_read_helper(int fd)
 	std::vector<uint8_t> buf;
 	buf.resize(sz);
 
-	while ((rcvt = recv(fd, (char *) buf.data(), buf.size(), MSG_WAITALL)) < 0)
-	{
-		if (errno == EINTR)
-			continue;
-		throw std::runtime_error("recv");
-	}
-	if (rcvt == 0)
-		throw std::runtime_error("recv disconnect");
+	tcpthreaded_aux_recv(fd, (char *) buf.data(), buf.size());
 
 	NetworkPacket packet(std::move(buf), networkpacket_vec_steal_tag_t());
 
