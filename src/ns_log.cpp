@@ -1,3 +1,5 @@
+#include <cstdarg>
+#include <cstdio>
 #include <memory>
 
 #include <selfup/ns_log.h>
@@ -16,6 +18,33 @@ void NsLog::logSimple(const char * msg, size_t msg_len)
 	m_buf.append("[raw]: ");
 	m_buf.append(msg, msg_len);
 	m_buf.append(1, '\n');
+}
+
+void NsLog::srvLogDump(const char *msg, size_t msg_len)
+{
+	/* FIXME: THANKS DREPPER https://sourceware.org/bugzilla/show_bug.cgi?id=5998 */
+	const char hdr[] = "[logdump]:\n";
+	if (fwrite(hdr, 1, sizeof hdr - 1, stdout) != sizeof hdr - 1)
+		throw std::runtime_error("logdump write hdr");
+	if (fwrite(msg, 1, msg_len, stdout) != msg_len)
+		throw std::runtime_error("logdump write data");
+	if (fflush(stdout) != 0)
+		throw std::runtime_error("logdump write flush");
+}
+
+void NsLog::srvLogPf(const char *cpp_file, int cpp_line, const char *format, ...)
+{
+	va_list argp;
+	va_start(argp, format);
+
+	int numwrite = 0;
+
+	if (vfprintf(stdout, format, argp) < 0)
+		throw std::runtime_error("logpf write");
+	if (fflush(stdout) != 0)
+		throw std::runtime_error("logpf flush");
+
+	va_end(argp);
 }
 
 void NsLog::initGlobal()

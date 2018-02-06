@@ -10,6 +10,7 @@
 #include <selfup/ns_conf.h>
 #include <selfup/ns_git_shims.h>
 #include <selfup/ns_helpers.h>
+#include <selfup/ns_log.h>
 #include <selfup/ns_systemd.h>
 #include <selfup/TCPAsync.h>
 
@@ -118,14 +119,7 @@ public:
 
 			const char *data = packet->inSizedStr(datanum);
 
-			/* FIXME: THANKS DREPPER https://sourceware.org/bugzilla/show_bug.cgi?id=5998 */
-			const char hdr[] = "[logdump]:\n";
-			if (fwrite(hdr, 1, sizeof hdr - 1, stdout) != sizeof hdr - 1)
-				throw std::runtime_error("logdump write hdr");
-			if (fwrite(data, 1, datanum, stdout) != datanum)
-				throw std::runtime_error("logdump write data");
-			if (fflush(stdout) != 0)
-				throw std::runtime_error("logdump write flush");
+			NS_SOG_DUMP(data, datanum);
 		}
 		break;
 
@@ -220,6 +214,7 @@ void servup_start_crank(Address addr)
 int main(int argc, char **argv)
 {
 	ns_conf::Conf::initGlobal();
+	NsLog::initGlobal();
 
 	tcpthreaded_startup_helper();
 	Address addr(AF_INET, g_conf->getDec("serv_port"), g_conf->getHex("serv_bind_addr"), address_ipv4_tag_t());

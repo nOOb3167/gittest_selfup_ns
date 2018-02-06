@@ -845,13 +845,12 @@ void selfup_start_crank(Address addr)
 
 int main(int argc, char **argv)
 {
-	ns_conf::Conf::initGlobal();
-
 	tcpthreaded_startup_helper();
 
 	if (git_libgit2_init() < 0)
 		throw std::runtime_error("libgit2 init");
 
+	ns_conf::Conf::initGlobal();
 	NsLog::initGlobal();
 	ns_gui::GuiCtx::initGlobal();
 	g_gui_ctx->start();
