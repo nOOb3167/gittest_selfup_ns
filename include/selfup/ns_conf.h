@@ -8,7 +8,11 @@
 #include <vector>
 #include <utility>
 
+#include <ns_conf_builtin.h>
+#include <selfup/ns_filesys.h>
 #include <selfup/ns_helpers.h>
+
+#define NS_CONF_FILENAME "ns_conf.conf"
 
 #define NS_CONF_STR(builtin_varname) std::string((char *)(builtin_varname), sizeof (builtin_varname))
 
@@ -69,6 +73,23 @@ public:
 		return num;
 	}
 
+	static std::unique_ptr<Conf> createDefault()
+	{
+		std::string raw;
+		try {
+			std::string path = ns_filesys::path_append_abs_rel(ns_filesys::current_executable_directory(), NS_CONF_FILENAME);
+			raw = std::move(ns_filesys::file_read(path));
+		}
+		catch (const FilesysExc &)
+		{
+			raw = std::move(NS_CONF_STR(g_conf_builtin_str));
+		}
+		std::unique_ptr<Conf> conf(new Conf());
+		conf->load(raw);
+		return conf;
+	}
+
+private:
 	static std::map<std::string, std::string> loadRaw(const std::string &raw)
 	{
 		std::map<std::string, std::string> map;
