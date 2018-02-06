@@ -22,6 +22,7 @@ ENDFUNCTION()
 NS_GENERATE_HEADER(imgpbblip_96_32_   ${CMAKE_SOURCE_DIR}/data/imgpbblip_96_32_.data   ${CMAKE_BINARY_DIR}/imgpbblip_96_32_.h)
 NS_GENERATE_HEADER(imgpbempty_384_32_ ${CMAKE_SOURCE_DIR}/data/imgpbempty_384_32_.data ${CMAKE_BINARY_DIR}/imgpbempty_384_32_.h)
 NS_GENERATE_HEADER(imgpbfull_384_32_  ${CMAKE_SOURCE_DIR}/data/imgpbfull_384_32_.data  ${CMAKE_BINARY_DIR}/imgpbfull_384_32_.h)
+NS_GENERATE_HEADER(g_conf_builtin_hex ${CMAKE_SOURCE_DIR}/data/ns_conf_builtin.conf       ${CMAKE_BINARY_DIR}/ns_conf_builtin.h)
 
 SET(SELFUP_NS_HEADERS
 	include/selfup/NetworkPacket.h
@@ -46,6 +47,7 @@ SET(SELFUP_NS_SOURCES
 )
 
 SET(SERV_NS_HEADERS
+	include/selfup/ns_conf.h
 	include/selfup/ns_git_shims.h
 	include/selfup/ns_filesys.h
 	include/selfup/ns_helpers.h
@@ -53,6 +55,7 @@ SET(SERV_NS_HEADERS
 	include/selfup/NetworkPacket.h
 	include/selfup/TCPAddress.h
 	include/selfup/TCPAsync.h
+	${CMAKE_BINARY_DIR}/ns_conf_builtin.h
 )
 SET(SERV_NS_SOURCES
 	src/NetworkPacket.cpp

@@ -7,12 +7,16 @@
 #include <thread>
 #include <utility>
 
+#include <ns_conf_builtin.h>
+#include <selfup/ns_conf.h>
 #include <selfup/ns_git_shims.h>
 #include <selfup/ns_helpers.h>
 #include <selfup/ns_systemd.h>
 #include <selfup/TCPAsync.h>
 
 #define SERVUP_THREAD_NUM 1
+
+std::unique_ptr<ns_conf::Conf> g_conf;
 
 using namespace ns_git;
 
@@ -218,6 +222,9 @@ void servup_start_crank(Address addr)
 
 int main(int argc, char **argv)
 {
+	g_conf = std::unique_ptr<ns_conf::Conf>(new ns_conf::Conf());
+	g_conf->load(NS_CONF_STR(g_conf_builtin_hex));
+
 	tcpthreaded_startup_helper();
 	Address addr(AF_INET, 6757, 0x00000000, address_ipv4_tag_t());
 	servup_start_crank(addr);
