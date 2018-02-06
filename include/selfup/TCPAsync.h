@@ -448,12 +448,14 @@ void tcpthreaded_aux_recv(int fd, char *buf, int len)
 		while ((rcvt = recv(fd, (char *) buf + off, len - off, 0)) < 0)
 		{
 			/* SO_RCVTIMEO can cause errno EAGAIN or EWOULDBLOCK */
-			if (g_tcpasync_disable_timeout && errno == EAGAIN || errno == EWOULDBLOCK)
+			if (g_tcpasync_disable_timeout && (errno == EAGAIN || errno == EWOULDBLOCK))
 				continue;
 			if (errno == EINTR)
 				continue;
 			throw std::runtime_error("recv rcvt");
 		}
+		if (rcvt == 0)
+			throw std::runtime_error("recv rcvt");
 		off += rcvt;
 	}
 }
