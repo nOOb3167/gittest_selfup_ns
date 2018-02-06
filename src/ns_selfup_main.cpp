@@ -15,6 +15,7 @@
 #include <git2/sys/memes.h>
 
 #include <selfup/NetworkPacket.h>
+#include <selfup/ns_conf.h>
 #include <selfup/ns_filesys.h>
 #include <selfup/ns_gui.h>
 #include <selfup/ns_helpers.h>
@@ -844,6 +845,8 @@ void selfup_start_crank(Address addr)
 
 int main(int argc, char **argv)
 {
+	ns_conf::Conf::initGlobal();
+
 	tcpthreaded_startup_helper();
 
 	if (git_libgit2_init() < 0)
@@ -855,7 +858,7 @@ int main(int argc, char **argv)
 
 	NS_STATUS("startup");
 
-	Address addr(AF_INET, 6757, 0x7F000001, address_ipv4_tag_t());
+	Address addr(AF_INET, g_conf->getDec("serv_port"), g_conf->getHex("serv_conn_addr"), address_ipv4_tag_t());
 
 	selfup_start_crank(addr);
 	selfup_start_mainupdate_crank(addr);

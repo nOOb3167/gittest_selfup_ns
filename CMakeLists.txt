@@ -26,6 +26,7 @@ NS_GENERATE_HEADER(g_conf_builtin_str ${CMAKE_SOURCE_DIR}/data/ns_conf_builtin.c
 
 SET(SELFUP_NS_HEADERS
 	include/selfup/NetworkPacket.h
+	include/selfup/ns_conf.h
 	include/selfup/ns_filesys.h
 	include/selfup/ns_gui.h
 	include/selfup/ns_helpers.h
@@ -38,6 +39,7 @@ SET(SELFUP_NS_HEADERS
 )
 SET(SELFUP_NS_SOURCES
 	src/NetworkPacket.cpp
+	src/ns_conf.cpp
 	src/ns_filesys.cpp
 	src/ns_gui.cpp
 	src/ns_gui_win.cpp
