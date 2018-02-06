@@ -15,8 +15,6 @@
 
 #define SERVUP_THREAD_NUM 1
 
-std::unique_ptr<ns_conf::Conf> g_conf;
-
 using namespace ns_git;
 
 typedef TCPThreaded::Respond Respond;

@@ -59,6 +59,7 @@ SET(SERV_NS_HEADERS
 )
 SET(SERV_NS_SOURCES
 	src/NetworkPacket.cpp
+	src/ns_conf.cpp
 	src/ns_filesys.cpp
 	src/ns_helpers.cpp
 	src/ns_serv_main.cpp
