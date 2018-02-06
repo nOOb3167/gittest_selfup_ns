@@ -32,7 +32,7 @@ public:
 	uint32_t    getHex(const std::string &key);
 	int32_t     getDec(const std::string &key);
 
-	static std::unique_ptr<Conf> createDefault();
+	static void initGlobal();
 
 private:
 	static std::map<std::string, std::string> loadRaw(const std::string &raw);

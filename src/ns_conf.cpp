@@ -56,8 +56,11 @@ int32_t Conf::getDec(const std::string & key)
 	return num;
 }
 
-std::unique_ptr<Conf> Conf::createDefault()
+void Conf::initGlobal()
 {
+	if (g_conf)
+		throw std::runtime_error("conf global");
+
 	std::string raw;
 	try {
 		std::string path = ns_filesys::path_append_abs_rel(ns_filesys::current_executable_directory(), NS_CONF_FILENAME);
@@ -67,9 +70,11 @@ std::unique_ptr<Conf> Conf::createDefault()
 	{
 		raw = std::move(NS_CONF_STR(g_conf_builtin_str));
 	}
+
 	std::unique_ptr<Conf> conf(new Conf());
 	conf->load(raw);
-	return conf;
+
+	g_conf = std::move(conf);
 }
 
 std::map<std::string, std::string> Conf::loadRaw(const std::string & raw)

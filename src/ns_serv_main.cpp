@@ -219,7 +219,7 @@ void servup_start_crank(Address addr)
 
 int main(int argc, char **argv)
 {
-	g_conf = ns_conf::Conf::createDefault();
+	ns_conf::Conf::initGlobal();
 
 	tcpthreaded_startup_helper();
 	Address addr(AF_INET, g_conf->getDec("serv_port"), g_conf->getHex("serv_bind_addr"), address_ipv4_tag_t());
