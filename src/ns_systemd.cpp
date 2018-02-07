@@ -37,6 +37,18 @@ void ns_sd_notify(int unset_environment, const std::string &state)
 //  for (char **env = environ; *env; env++)
 //    printf("e %s\n", *env);
 
+
+// https://coreos.com/blog/eliminating-journald-delays-part-1.html
+// https://github.com/systemd/systemd/blob/master/src/journal/cat.c
+// https://www.freedesktop.org/software/systemd/man/sd_journal_stream_fd.html
+// https://github.com/systemd/systemd/blob/master/src/journal/journal-send.c
+//   systemd-cat
+//   """I'll be using the systemd-cat utility, which logs stdin via the "stream" journald source,
+//      analogous to how a systemd-managed service's output may be logged."""
+//   """sd_journal_stream_fd() may be used to create a log stream file descriptor.
+//      Log messages written to this file descriptor as simple newline-separated text strings are written to the journal. """
+// wrt sd_journal_stream_fd also see the journal_fd function (AF_UNIX of SOCK_DGRAM with increased sndbuf)
+
 static void close_helper(int *p)
 {
 	if (p && *p != -1)
