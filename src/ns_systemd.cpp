@@ -1,10 +1,21 @@
 #ifdef _WIN32
 
+#include <cstdio>
 #include <string>
 
 void ns_sd_notify(int unset_environment, const std::string &state)
 {
 	/* empty */
+}
+
+void ns_sd_journal_send_fd(int fd, const char *msg, size_t msg_len)
+{
+	fprintf(stdout, "%.*s\n", (int) msg_len, msg);
+}
+
+void ns_sd_journal_send_oneshot(const char *msg, size_t msg_len)
+{
+	fprintf(stdout, "%.*s\n", (int) msg_len, msg);
 }
 
 #else /* _WIN32 */
