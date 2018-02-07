@@ -28,6 +28,8 @@ void NsLog::srvLogDump(const char *msg, size_t msg_len)
 		throw std::runtime_error("logdump write hdr");
 	if (fwrite(msg, 1, msg_len, stdout) != msg_len)
 		throw std::runtime_error("logdump write data");
+	if (fwrite("\n", 1, 1, stdout) != 1)
+		throw std::runtime_error("logpf write nl");
 	if (fflush(stdout) != 0)
 		throw std::runtime_error("logdump write flush");
 }
@@ -41,6 +43,8 @@ void NsLog::srvLogPf(const char *cpp_file, int cpp_line, const char *format, ...
 
 	if (vfprintf(stdout, format, argp) < 0)
 		throw std::runtime_error("logpf write");
+	if (fwrite("\n", 1, 1, stdout) != 1)
+		throw std::runtime_error("logpf write nl");
 	if (fflush(stdout) != 0)
 		throw std::runtime_error("logpf flush");
 
