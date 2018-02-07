@@ -32,7 +32,7 @@ typedef enum {
 	NS_GIT_FILEMODE_BLOB_EXECUTABLE = 0100755,
 } ns_git_filemode_t;
 
-static struct { ns_git_otype n; char *s; } ns_git_objects_table[] = {
+static struct { ns_git_otype n; const char *s; } ns_git_objects_table[] = {
 	{ NS_GIT_OBJ_COMMIT, "commit" },
 	{ NS_GIT_OBJ_TREE, "tree" },
 	{ NS_GIT_OBJ_BLOB, "blob" },

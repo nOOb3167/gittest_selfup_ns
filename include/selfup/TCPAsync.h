@@ -15,6 +15,7 @@
 #include <utility>
 #include <vector>
 
+#include <selfup/ns_log.h>
 #include <selfup/TCPAddress.h>
 #include <selfup/NetworkPacket.h>
 
@@ -229,6 +230,7 @@ protected:
 			}
 			catch (std::runtime_error &e) {
 				/* disconnect - resume dequeuing incoming connections */
+				NS_SOG_PF("disconnect");
 			}
 		}
 	}
@@ -566,7 +568,12 @@ void tcpthreaded_blocking_write_helper(int fd, NetworkPacket *packet, size_t aft
 
 	const size_t fsz = packet->getDataSize() + afterpacket_extra_size;
 
-	uint8_t hdr[9] = { 'F', 'R', 'A', 'M', 'E', (fsz >> 24) & 0xFF, (fsz >> 16) & 0xFF, (fsz >> 8) & 0xFF, (fsz >> 0) & 0xFF };
+	uint8_t hdr[9] = {
+		'F', 'R', 'A', 'M', 'E',
+		(uint8_t)(fsz >> 24 & 0xFF),
+		(uint8_t)(fsz >> 16 & 0xFF),
+		(uint8_t)(fsz >> 8 & 0xFF),
+		(uint8_t)(fsz >> 0 & 0xFF) };
 
 	const size_t iov_len = 2;
 	struct iovec iov[2] = {};
