@@ -9,7 +9,7 @@
 static void close_helper(int *p)
 {
 	if (p)
-		assert(p == -1);
+		assert(*p == -1);
 }
 
 void ns_sd_notify(int unset_environment, const std::string &state)
@@ -25,7 +25,7 @@ ns_systemd_fd ns_sd_journal_create_fd()
 void ns_sd_journal_send_fd_iov(int fd, struct nsiovec *nsiov, size_t n)
 {
 	for (size_t i = 0; i < n; i++)
-		fprintf(stdout, "%.*s", (int) nsiov[i].iov_len, nsiov[i].iov_base);
+		fprintf(stdout, "%.*s", (int) nsiov[i].iov_len, (char *) nsiov[i].iov_base);
 	fprintf(stdout, "\n");
 }
 

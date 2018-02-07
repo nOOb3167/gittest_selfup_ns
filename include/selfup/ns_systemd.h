@@ -1,6 +1,7 @@
 #ifndef _NS_SYSTEMD_H_
 #define _NS_SYSTEMD_H_
 
+#include <memory>
 #include <string>
 
 struct nsiovec
