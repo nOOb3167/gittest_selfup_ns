@@ -3,12 +3,14 @@
 #include <memory>
 
 #include <selfup/ns_log.h>
+#include <selfup/ns_systemd.h>
 
 std::unique_ptr<NsLog> g_log;
 
 NsLog::NsLog() :
 	m_mutex(),
-	m_buf()
+	m_buf(),
+	m_fd(ns_sd_journal_create_fd())
 {
 	m_buf.reserve(64536);
 }
@@ -22,31 +24,35 @@ void NsLog::logSimple(const char * msg, size_t msg_len)
 
 void NsLog::srvLogDump(const char *msg, size_t msg_len)
 {
-	/* FIXME: THANKS DREPPER https://sourceware.org/bugzilla/show_bug.cgi?id=5998 */
-	const char hdr[] = "[logdump]:\n";
-	if (fwrite(hdr, 1, sizeof hdr - 1, stdout) != sizeof hdr - 1)
-		throw std::runtime_error("logdump write hdr");
-	if (fwrite(msg, 1, msg_len, stdout) != msg_len)
-		throw std::runtime_error("logdump write data");
-	if (fwrite("\n", 1, 1, stdout) != 1)
-		throw std::runtime_error("logpf write nl");
-	if (fflush(stdout) != 0)
-		throw std::runtime_error("logdump write flush");
+	struct nsiovec iov[2] = {};
+	iov[0].iov_base = (void *) "[logdump]:\n";
+	iov[0].iov_len  = sizeof "[logdump]:\n" - 1;
+	iov[1].iov_base = (void *) msg;
+	iov[1].iov_len  = msg_len;
+
+	ns_sd_journal_send_fd_iov(*m_fd, iov, 2);
 }
 
 void NsLog::srvLogPf(const char *cpp_file, int cpp_line, const char *format, ...)
 {
+	// FIXME: what is a good length limit for vsnprintf ?
+	char buf[8192];
+
 	va_list argp;
 	va_start(argp, format);
 
-	int numwrite = 0;
+	int nw = 0;
 
-	if (vfprintf(stdout, format, argp) < 0)
-		throw std::runtime_error("logpf write");
-	if (fwrite("\n", 1, 1, stdout) != 1)
-		throw std::runtime_error("logpf write nl");
-	if (fflush(stdout) != 0)
-		throw std::runtime_error("logpf flush");
+	try {
+		if ((nw = vsnprintf(buf, 8192, format, argp)) < 0 || nw >= 8192)
+			throw std::runtime_error("logpf write");
+
+		ns_sd_journal_send_fd(*m_fd, buf, nw);
+	}
+	catch (const std::exception &e) {
+		va_end(argp);
+		throw;
+	}
 
 	va_end(argp);
 }

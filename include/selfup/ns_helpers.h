@@ -3,6 +3,15 @@
 
 #include <string>
 
+#ifdef _MSC_VER
+#  include <malloc.h>
+#else
+#  include <alloca.h>
+#endif
+
+#define GS_ALLOCA_VAR(VARNAME, TT, NELT) TT *VARNAME = (TT *) alloca(sizeof (TT) * (NELT))
+#define GS_ALLOCA_ASSIGN(VARNAME, TT, NELT) (VARNAME) = ((TT *) alloca(sizeof (TT) * (NELT)))
+
 #define GS_MAX(x, y) (((x) > (y)) ? (x) : (y))
 #define GS_MIN(x, y) (((x) < (y)) ? (x) : (y))
 

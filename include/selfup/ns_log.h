@@ -6,6 +6,8 @@
 #include <stdexcept>
 #include <string>
 
+#include <selfup/ns_systemd.h>
+
 #define NS_LOG_LOCK() std::lock_guard<std::mutex> lock(g_log->getMutex())
 
 #define NS_LOG_SZ(msg, msg_len) do { NS_LOG_LOCK(); g_log->logSimple((msg), (msg_len)); } while (0)
@@ -34,6 +36,8 @@ public:
 private:
 	std::mutex   m_mutex;
 	std::string  m_buf;
+
+	ns_systemd_fd m_fd;
 };
 
 #endif /* _NS_LOG_H_ */
