@@ -105,10 +105,10 @@ std::string memes_objpath(
 	const std::string &repopath,
 	ns_git_oid oid);
 unsigned long long memes_parse_mode(const std::string &buf);
-void memes_tree(
+int memes_tree(
 	const std::string &inflated,
 	size_t inflated_offset,
-	size_t *inout_parse_offset,
+	size_t in_parse_offset,
 	unsigned long long *out_mode,
 	std::string *out_filename,
 	ns_git_oid *out_sha1);
@@ -283,22 +283,22 @@ unsigned long long memes_parse_mode(const std::string &buf)
 	return mode;
 }
 
-void memes_tree(
+int memes_tree(
 	const std::string &inflated,
 	size_t inflated_offset,
-	size_t *inout_parse_offset,
+	size_t in_parse_offset,
 	unsigned long long *out_mode,
 	std::string *out_filename,
 	ns_git_oid *out_sha1)
 {
-	size_t offset = inflated_offset + *inout_parse_offset;
+	/* adjust by inflated_offset - this will be undone computing final inout_parse_offset */
+
+	size_t offset = inflated_offset + in_parse_offset;
 
 	/* handle end condition */
 
-	if (offset >= inflated.size()) {
-		*inout_parse_offset = -1;
-		return;
-	}
+	if (offset >= inflated.size())
+		return -1;
 
 	/* parse mode string (octal digits followed by space) */
 
@@ -334,11 +334,13 @@ void memes_tree(
 	ns_git_oid sha1 = oid_from_raw(inflated.substr(afterfilename, NS_GIT_OID_RAWSZ));
 
 	size_t aftersha1 = afterfilename + NS_GIT_OID_RAWSZ;
+	size_t aftersha1_parse_offset = aftersha1 - inflated_offset;
 
-	*inout_parse_offset = aftersha1;
 	*out_mode = mode;
 	*out_filename = std::move(filename);
 	*out_sha1 = sha1;
+
+	return aftersha1_parse_offset;
 }
 
 void memes_get_object_header(
@@ -459,15 +461,13 @@ ns_git_oid latest_selfupdate_blob_oid(
 	ns_git_oid tree_oid = latest_commit_tree_oid(repopath, refname);
 	NsGitObject tree_obj = read_object(repopath, tree_oid, false);
 
-	size_t             parse_offset = 0;
+	size_t             off  = 0;
 	unsigned long long mode = 0;
 	std::string        filename;
 	ns_git_oid         objoid = {};
-	do {
-		memes_tree(tree_obj.m_inflated, tree_obj.m_inflated_offset, &parse_offset, &mode, &filename, &objoid);
+	while ((off = memes_tree(tree_obj.m_inflated, tree_obj.m_inflated_offset, off, &mode, &filename, &objoid)) != -1)
 		if (filename == blob_filename)
 			return objoid;
-	} while (parse_offset != -1);
 
 	throw std::runtime_error("selfupdate tree missing entry blob_filename");
 }
@@ -505,18 +505,17 @@ void treelist_visit(const std::string &repopath, treemap_t *treemap, treeset_t *
 		/* = mark n = */
 		markset->insert(tree.m_oid);
 		/* = for each node m with an edge from n to m do = */
-		size_t             parse_offset = 0;
-		unsigned long long mode         = 0;
+		size_t             off    = 0;
+		unsigned long long mode   = 0;
 		std::string        filename;
-		ns_git_oid         objoid       = {};
-		do {
-			memes_tree(tree.m_inflated, tree.m_inflated_offset, &parse_offset, &mode, &filename, &objoid);
+		ns_git_oid         objoid = {};
+		while ((off = memes_tree(tree.m_inflated, tree.m_inflated_offset, off, &mode, &filename, &objoid)) != -1) {
 			if (mode != NS_GIT_FILEMODE_TREE)
 				continue;
 			NsGitObject subtree = read_object(repopath, objoid, 1);
 			/* = visit(m) = */
 			treelist_visit(repopath, treemap, markset, std::move(subtree));
-		} while (parse_offset != -1);
+		}
 		/* = add n to head of L = */
 		if (! treemap->insert(std::make_pair(tree.m_oid, std::move(tree))).second)
 			throw std::runtime_error("treemap exist");
