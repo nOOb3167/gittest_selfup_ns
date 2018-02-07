@@ -9,6 +9,8 @@ void ns_sd_notify(int unset_environment, const std::string &state)
 
 #else /* _WIN32 */
 
+#include <cassert>
+#include <cstdint>
 #include <cstdlib>
 #include <cstring>
 #include <memory>
@@ -49,10 +51,50 @@ void ns_sd_notify(int unset_environment, const std::string &state)
 //      Log messages written to this file descriptor as simple newline-separated text strings are written to the journal. """
 // wrt sd_journal_stream_fd also see the journal_fd function (AF_UNIX of SOCK_DGRAM with increased sndbuf)
 
+#define NS_SYSTEMD_SNDBUF_SIZE (8 * 1024 * 1024)  // matching journal-send.c
+
+typedef ::std::unique_ptr<int, void(*)(int *p)> ns_systemd_fd;
+
 static void close_helper(int *p)
 {
 	if (p && *p != -1)
 		close(*p);
+}
+
+static ns_systemd_fd journal_fd()
+{
+	ns_systemd_fd fd(new int(socket(AF_UNIX, SOCK_DGRAM | SOCK_CLOEXEC, 0)), close_helper);
+
+	if (*fd < 0)
+		throw std::runtime_error("journal_fd socket");
+
+	int val = 0;
+	socklen_t len = sizeof val;
+
+	int r = getsockopt(*fd, SOL_SOCKET, SO_SNDBUF, &val, &len);
+	if (r >= 0 && len == sizeof val && val >= NS_SYSTEMD_SNDBUF_SIZE)
+		return fd;
+
+	val = NS_SYSTEMD_SNDBUF_SIZE;
+	if (setsockopt(*fd, SOL_SOCKET, SO_SNDBUF, &val, sizeof val) < 0)
+		throw std::runtime_error("journal_fd setsockopt");
+
+	return fd;
+}
+
+static uint64_t ns_htole64(uint64_t h)
+{
+	uint64_t u = 0;
+	uint8_t *p = (uint8_t *) &u;
+	p[0] = h >>  0 & 0xFF;
+	p[1] = h >>  8 & 0xFF;
+	p[2] = h >> 16 & 0xFF;
+	p[3] = h >> 24 & 0xFF;
+	p[4] = h >> 32 & 0xFF;
+	p[5] = h >> 40 & 0xFF;
+	p[6] = h >> 48 & 0xFF;
+	p[7] = h >> 56 & 0xFF;
+	return u;
 }
 
 void ns_sd_notify(int unset_environment, const std::string &state)
@@ -85,7 +127,7 @@ void ns_sd_notify(int unset_environment, const std::string &state)
 
 	/* send message */
 
-	std::unique_ptr<int, void(*)(int *p)> fd(new int(socket(AF_UNIX, SOCK_DGRAM | SOCK_CLOEXEC, 0)), close_helper);
+	ns_systemd_fd fd(new int(socket(AF_UNIX, SOCK_DGRAM | SOCK_CLOEXEC, 0)), close_helper);
 
 	if (*fd < 0)
 		throw std::runtime_error("NOTIFY_SOCKET socket");
@@ -97,6 +139,62 @@ void ns_sd_notify(int unset_environment, const std::string &state)
 
 	if (unset_environment)
 		unsetenv("NOTIFY_SOCKET");
+}
+
+static void ns_sd_journal_send_fd_iov(int fd, struct iovec *iov, int n)
+{
+	const char path[] = "/run/systemd/journal/socket";
+	struct sockaddr_un sa = {};
+	memmove(sa.sun_path, path, sizeof path - 1);
+	sa.sun_family = AF_UNIX;
+	struct msghdr mh = {};
+	mh.msg_name = (struct sockaddr *) &sa;
+	mh.msg_namelen = offsetof(struct sockaddr_un, sun_path) + strnlen(sa.sun_path, sizeof (sa.sun_path));
+	mh.msg_iov = iov;
+	mh.msg_iovlen = n;
+
+	ssize_t k = sendmsg(fd, &mh, MSG_NOSIGNAL);
+	/* enoent aka journal not available */
+	if (k < 0 && errno == ENOENT)
+		return;
+	if (k < 0 && (errno == EMSGSIZE || errno == ENOBUFS))
+		throw std::runtime_error("journal_send write size");
+	if (k < 0)
+		throw std::runtime_error("journal_send write");
+}
+
+void ns_sd_journal_send_fd(int fd, const char *msg, size_t msg_len)
+{
+	struct iovec iov[5 * 1] = {};
+	size_t j = 0;
+	iov[j]  .iov_base = (void *) "MESSAGE";
+	iov[j++].iov_len  = sizeof "MESSAGE" - 1;
+	char *nl = (char *) memchr(msg, '\n', msg_len);
+	uint64_t le = ns_htole64(msg_len);
+	if (nl) {
+		iov[j]  .iov_base = (void *) "\n";
+		iov[j++].iov_len  = 1;
+		iov[j]  .iov_base = &le;
+		iov[j++].iov_len  = sizeof (uint64_t);
+	}
+	else {
+		iov[j]  .iov_base = (void *) "=";
+		iov[j++].iov_len  = 1;
+	}
+	iov[j]  .iov_base = (void *) msg;
+	iov[j++].iov_len  = msg_len;
+	iov[j]  .iov_base = (void *) "\n";
+	iov[j++].iov_len  = 1;
+
+	assert(j <= sizeof iov / sizeof *iov);
+
+	ns_sd_journal_send_fd_iov(fd, iov, j);
+}
+
+void ns_sd_journal_send_oneshot(const char *msg, size_t msg_len)
+{
+	ns_systemd_fd fd(journal_fd());
+	ns_sd_journal_send_fd(*fd, msg, msg_len);
 }
 
 #endif /* _WIN32 */
