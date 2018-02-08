@@ -28,6 +28,7 @@ SET(SELFUP_NS_HEADERS
 	include/selfup/NetworkPacket.h
 	include/selfup/ns_conf.h
 	include/selfup/ns_filesys.h
+	include/selfup/ns_git_aux.h
 	include/selfup/ns_gui.h
 	include/selfup/ns_helpers.h
 	include/selfup/ns_log.h
@@ -42,6 +43,7 @@ SET(SELFUP_NS_SOURCES
 	src/NetworkPacket.cpp
 	src/ns_conf.cpp
 	src/ns_filesys.cpp
+	src/ns_git_aux.cpp
 	src/ns_gui.cpp
 	src/ns_gui_win.cpp
 	src/ns_helpers.cpp
