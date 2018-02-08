@@ -15,6 +15,8 @@
 #include <imgpbempty_384_32_.h>
 #include <imgpbfull_384_32_.h>
 
+#define GS_GUI_WIN_MAGIC_MSGNUM (WM_USER + 0x5423)
+
 #define GS_GUI_WIN_FRAMERATE 30
 
 #define GS_GUI_WIN_READIMAGE_B(hdc, lump) win_readimage_b(hdc, std::string(# lump), std::string((char *)(lump), sizeof (lump)))
@@ -355,6 +357,8 @@ void win_threadfunc()
 		{
 			if (msg.message == WM_QUIT)
 				goto label_done;
+			if (msg.message == GS_GUI_WIN_MAGIC_MSGNUM)
+				goto label_done;
 
 			TranslateMessage(&msg);
 			DispatchMessage(&msg);
@@ -404,9 +408,53 @@ label_done:
 	return;
 }
 
+class GuiCtxPlatWin : public GuiCtxPlat
+{
+public:
+	GuiCtxPlatWin(GuiCtx *ctx) :
+		m_ctx(ctx),
+		m_event0(NULL)
+	{
+		if (! (m_event0 = CreateEvent(NULL, TRUE, FALSE, NULL)))
+			throw std::runtime_error("create event");
+	}
+
+	void virtualGuiRun() override {
+		/* https://msdn.microsoft.com/en-us/library/windows/desktop/ms644946(v=vs.85).aspx
+		     see the Remarks section of linked page for synchronization protocol. */
+		MSG msg = {};
+		PeekMessage(&msg, NULL, WM_USER, WM_USER, PM_NOREMOVE);
+		if (! SetEvent(m_event0))
+			throw std::runtime_error("set event");
+		
+		win_threadfunc();
+	}
+
+	void virtualGuiStopRequest() override {
+		/* https://msdn.microsoft.com/en-us/library/jj870808(v=vs.120).aspx
+		     native_handle_type is defined as a Win32 HANDLE that's cast as void */
+		std::thread &thread = m_ctx->getThread();
+		HANDLE hthread = (HANDLE) thread.native_handle();
+		DWORD idthread = GetThreadId(hthread);
+
+		/* https://msdn.microsoft.com/en-us/library/windows/desktop/ms644946(v=vs.85).aspx
+		     "The function fails if the specified thread does not have a message queue."
+		     creating message queue races with stop request.
+		     see the Remarks section of linked page for synchronization protocol. */
+		if (WaitForSingleObject(m_event0, INFINITE) != WAIT_OBJECT_0)
+			throw std::runtime_error("wait for single object");
+		if (! PostThreadMessage(idthread, GS_GUI_WIN_MAGIC_MSGNUM, 0, 0))
+			throw std::runtime_error("post thread message");
+	}
+
+private:
+	ns_gui::GuiCtx *m_ctx;
+	HANDLE m_event0;
+};
+
+GuiCtxPlat * gui_ctx_plat_create(GuiCtx *ctx)
+{
+	return new GuiCtxPlatWin(ctx);
 }
 
-void gui_run()
-{
-	ns_gui::win_threadfunc();
 }

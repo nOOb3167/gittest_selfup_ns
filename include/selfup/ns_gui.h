@@ -22,11 +22,19 @@
 namespace ns_gui { class GuiCtx; }
 extern std::unique_ptr<ns_gui::GuiCtx> g_gui_ctx;
 
-/* gui_run needs implementing per-platform */
-void gui_run();
-
 namespace ns_gui
 {
+
+/* needs subclassing per-platform */
+class GuiCtxPlat
+{
+public:
+	virtual ~GuiCtxPlat() = default;
+	virtual void virtualGuiRun() = 0;
+	virtual void virtualGuiStopRequest() = 0;
+};
+/* needs implementation per-platform */
+GuiCtxPlat * gui_ctx_plat_create(GuiCtx *ctx);
 
 class AuxImg
 {
@@ -85,6 +93,7 @@ class GuiCtx
 {
 public:
 	GuiCtx() :
+		m_ctxplat(gui_ctx_plat_create(this)),
 		m_progress(new GuiProgress()),
 		m_mutex(),
 		m_thread_exc(),
@@ -94,7 +103,7 @@ public:
 	void threadFunc()
 	{
 		try {
-			gui_run();
+			m_ctxplat->virtualGuiRun();
 		}
 		catch (const std::exception &e) {
 			m_thread_exc = std::current_exception();
@@ -120,6 +129,11 @@ public:
 		}
 	}
 
+	void stopRequest()
+	{
+		m_ctxplat->virtualGuiStopRequest();
+	}
+
 	std::mutex & getMutex()
 	{
 		return m_mutex;
@@ -128,6 +142,11 @@ public:
 	GuiProgress & getProgress()
 	{
 		return *m_progress;
+	}
+
+	std::thread & getThread()
+	{
+		return m_thread;
 	}
 
 	static void initGlobal()
@@ -140,6 +159,7 @@ public:
 	}
 
 private:
+	std::unique_ptr<GuiCtxPlat>  m_ctxplat;
 	std::unique_ptr<GuiProgress> m_progress;
 	std::mutex         m_mutex;
 	std::exception_ptr m_thread_exc;

@@ -862,6 +862,7 @@ int main(int argc, char **argv)
 	selfup_start_crank(addr);
 	selfup_start_mainupdate_crank(addr);
 
+	g_gui_ctx->stopRequest();
 	g_gui_ctx->join();
 
 	NS_STATUS("shutdown");
