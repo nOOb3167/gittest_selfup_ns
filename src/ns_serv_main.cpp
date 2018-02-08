@@ -44,8 +44,10 @@ public:
 		if (oid_equals(it->second.m_commit_tree_oid, wanted_oid))
 			return;
 		/* actually refresh */
-		it->second.m_commit_tree_oid = wanted_oid;
-		it->second.m_trees = std::move(treelist_recursive(repopath, wanted_oid));
+		Head head;
+		head.m_commit_tree_oid = wanted_oid;
+		head.m_trees = std::move(treelist_recursive(repopath, wanted_oid));
+		it->second = std::move(head);
 	}
 
 	const treemap_t & getOidTrees(const std::string &repopath, ns_git_oid wanted_oid)
