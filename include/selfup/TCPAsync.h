@@ -194,6 +194,8 @@ protected:
 		while (true) {
 			unique_ptr_fd nsock(tcpthreaded_socket_accept_helper(*m_listen));
 
+			NS_SOG_PF("accept");
+
 			{
 				std::unique_lock<std::mutex> lock(m_queue_mutex);
 				m_queue_incoming.push_back(std::move(nsock));
@@ -221,6 +223,8 @@ protected:
 			m_queue_incoming.pop_front();
 			lock.unlock();
 
+			NS_SOG_PF("connect");
+
 			try {
 				while (true) {
 					NetworkPacket packet(tcpthreaded_blocking_read_helper(*fd));
@@ -230,7 +234,7 @@ protected:
 			}
 			catch (std::runtime_error &e) {
 				/* disconnect - resume dequeuing incoming connections */
-				NS_SOG_PF("disconnect");
+				NS_SOG_PF("disconnect [what=[%s]]", e.what());
 			}
 		}
 	}
