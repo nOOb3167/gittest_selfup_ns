@@ -398,9 +398,8 @@ public:
 						throw std::runtime_error("entry tree inexistant");
 				}
 				else if (git_tree_entry_type(entry) == GIT_OBJ_BLOB) {
-					if (git_odb_exists(odb.get(), git_tree_entry_id(entry)))
-						continue;
-					missing_blob_oids.push_back(*git_tree_entry_id(entry));
+					if (! git_odb_exists(odb.get(), git_tree_entry_id(entry)))
+						missing_blob_oids.push_back(*git_tree_entry_id(entry));
 				}
 				else {
 					throw std::runtime_error("entry type");
