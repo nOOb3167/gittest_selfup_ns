@@ -34,6 +34,10 @@
 
 #define NS_LOGDUMP(addr, magic) do { NS_LOG_LOCK(); TCPLogDump::dump((addr), (magic), g_log->getBuf().data(), g_log->getBuf().size()); } while (0);
 
+/* NOTE: attempting to exit with non-joined std::threads causes abort() */
+/* NOTE: main() must not leak exceptions due to reliance on stack unwinding (see RefKill) */
+#define NS_TOPLEVEL_CATCH(funcname, retname) do { try { funcname(); } catch (const std::exception &e) { retname = 1; } } while(0)
+
 int g_selfup_selfupdate_skip_fileops = 1;
 
 long long selfup_timestamp()
@@ -582,36 +586,33 @@ void selfup_reexec_probably_blocking(std::string exe_filename)
 
 void selfup_checkout(std::string repopath, std::string refname, std::string checkoutpath)
 {
-	unique_ptr_gitrepository repo(selfup_git_repository_open(repopath), deleteGitrepository);
-
-	git_oid commit_head_oid = {};
+	NS_STATUS("mainup checkout makedir");
+	ns_filesys::directory_create_unless_exist(checkoutpath);
 
 	NS_STATUS("mainup checkout ref and tree");
 
-	if (!! git_reference_name_to_id(&commit_head_oid, repo.get(), refname.c_str()))
-		throw std::runtime_error("refname id");
+	unique_ptr_gitrepository repo(selfup_git_repository_open(repopath), deleteGitrepository);
 
-	unique_ptr_gitcommit commit_head(selfup_git_commit_lookup(repo.get(), &commit_head_oid), deleteGitcommit);
-	unique_ptr_gittree   commit_tree(selfup_git_commit_tree(commit_head.get()), deleteGittree);
+	{
+		RefKill rki(repo.get(), refname);
 
-	NS_STATUS("mainup checkout makedir");
+		git_oid commit_head_oid(selfup_git_reference_name_to_id(repo.get(), refname));
+		unique_ptr_gitcommit commit_head(selfup_git_commit_lookup(repo.get(), &commit_head_oid), deleteGitcommit);
+		unique_ptr_gittree   commit_tree(selfup_git_commit_tree(commit_head.get()), deleteGittree);
 
-	ns_filesys::directory_create_unless_exist(checkoutpath);
+		NS_STATUS("mainup checkout tree");
 
-	git_checkout_options opts = GIT_CHECKOUT_OPTIONS_INIT;
-	opts.checkout_strategy = 0;
-	opts.checkout_strategy |= GIT_CHECKOUT_FORCE;
-	// FIXME: want this flag but bugs have potential to cause more damage - enable after enough testing
-	//opts.checkout_strategy |= GIT_CHECKOUT_REMOVE_UNTRACKED;
+		/* https://libgit2.github.com/docs/guides/101-samples/#objects_casting */
+		// FIXME: reevaluate checkout_strategy flag GIT_CHECKOUT_REMOVE_UNTRACKED
 
-	opts.disable_filters = 1;
-	opts.target_directory = checkoutpath.c_str();
+		git_checkout_options opts = GIT_CHECKOUT_OPTIONS_INIT;
+		opts.checkout_strategy = GIT_CHECKOUT_FORCE;
+		opts.disable_filters = 1;
+		opts.target_directory = checkoutpath.c_str();
 
-	NS_STATUS("mainup checkout tree");
-
-	/* https://libgit2.github.com/docs/guides/101-samples/#objects_casting */
-	if (!! git_checkout_tree(repo.get(), (git_object *) commit_tree.get(), &opts))
-		throw std::runtime_error("checkout tree");
+		if (!! git_checkout_tree(repo.get(), (git_object *) commit_tree.get(), &opts))
+			throw std::runtime_error("checkout tree");
+	}
 }
 
 unique_ptr_gitrepository selfup_ensure_repository(const std::string &repopath, const std::string &sanity_check_lump)
@@ -712,18 +713,8 @@ void selfup_start_crank(Address addr)
 	NS_STATUS("selfup filesys end");
 }
 
-int main(int argc, char **argv)
+void toplevel()
 {
-	tcpthreaded_startup_helper();
-
-	if (git_libgit2_init() < 0)
-		throw std::runtime_error("libgit2 init");
-
-	ns_conf::Conf::initGlobal();
-	NsLog::initGlobal();
-	ns_gui::GuiCtx::initGlobal();
-	g_gui_ctx->start();
-
 	NS_STATUS("startup");
 
 	Address addr(AF_INET, g_conf->getDec("serv_port"), g_conf->getHex("serv_conn_addr"), address_ipv4_tag_t());
@@ -737,6 +728,26 @@ int main(int argc, char **argv)
 	NS_STATUS("shutdown");
 
 	NS_LOGDUMP(addr, 0x04030201);
+}
 
-	return EXIT_SUCCESS;
+int main(int argc, char **argv)
+{
+	tcpthreaded_startup_helper();
+
+	if (git_libgit2_init() < 0)
+		throw std::runtime_error("libgit2 init");
+
+	ns_conf::Conf::initGlobal();
+	NsLog::initGlobal();
+	ns_gui::GuiCtx::initGlobal();
+	g_gui_ctx->start();
+
+	int ret = 0;
+
+	NS_TOPLEVEL_CATCH(toplevel, ret);
+
+	if (ret == 0)
+		return EXIT_SUCCESS;
+	else
+		return EXIT_FAILURE;
 }
