@@ -473,6 +473,22 @@ ns_git_oid latest_selfupdate_blob_oid(
 	throw std::runtime_error("selfupdate tree missing entry blob_filename");
 }
 
+NsGitObject read_object_memory_ex(const std::string &deflated)
+{
+	/* returns a scuffed NsGitObject - zero oid */
+
+	std::string inflated = inflatebuf(deflated);
+
+	ns_git_otype inflated_type = NS_GIT_OBJ_BAD;
+	size_t inflated_offset = 0;
+	size_t inflated_size = 0;
+	memes_get_object_header(inflated, &inflated_type, &inflated_offset, &inflated_size);
+
+	ns_git_oid oid_zero = {};
+	NsGitObject nsgitobj(oid_zero, inflated_type, std::move(inflated), inflated_offset, inflated_size, nsgitobject_normal_tag_t());
+	return nsgitobj;
+}
+
 NsGitObject read_object(
 	const std::string &repopath,
 	ns_git_oid oid,

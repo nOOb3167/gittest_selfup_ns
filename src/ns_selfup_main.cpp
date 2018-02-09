@@ -255,19 +255,12 @@ public:
 		uint32_t res_obj_blen = 0;
 		res_obj_pkt >> res_obj_blen;
 
-		std::string inflated(ns_git::inflatebuf(std::string(res_obj_pkt.inSizedStr(res_obj_blen), res_obj_blen)));
-		ns_git::ns_git_otype inflated_type = ns_git::NS_GIT_OBJ_BAD;
-		size_t inflated_offset = 0;
-		size_t inflated_size = 0;
-		ns_git::memes_get_object_header(inflated, &inflated_type, &inflated_offset, &inflated_size);
-		if (inflated_type != ns_git::NS_GIT_OBJ_BLOB)
-			throw std::runtime_error("inflate type");
-		assert(inflated_offset + inflated_size == inflated.size());
+		ns_git::NsGitObject obj(ns_git::read_object_memory_ex(std::string(res_obj_pkt.inSizedStr(res_obj_blen), res_obj_blen)));
 
 		NS_STATUS("selfup net objs write");
 
 		git_oid written_oid = {};
-		if (!! git_blob_create_frombuffer(&written_oid, memory_repository, inflated.data() + inflated_offset, inflated_size))
+		if (!! git_blob_create_frombuffer(&written_oid, memory_repository, obj.m_inflated.data() + obj.m_inflated_offset, obj.m_inflated_size))
 			throw std::runtime_error("blob create from buffer");
 		if (git_oid_cmp(&written_oid, &missing_obj_oid) != 0)
 			throw std::runtime_error("blob mismatch");
@@ -505,21 +498,15 @@ public:
 			uint8_t res_blobs_cmd = readGetCmd(&res_blobs);
 			NS_STATUS("mainup net objs res");
 			if (res_blobs_cmd == SELFUP_CMD_RESPONSE_OBJS3) {
-				NS_STATUS("mainup net objs write");
 				uint32_t size = 0;
 				res_blobs >> size;
-				std::string inflated(ns_git::inflatebuf(std::string(res_blobs.inSizedStr(size), size)));
-				ns_git::ns_git_otype inflated_type = ns_git::NS_GIT_OBJ_BAD;
-				size_t inflated_offset = 0;
-				size_t inflated_size = 0;
-				ns_git::memes_get_object_header(inflated, &inflated_type, &inflated_offset, &inflated_size);
-				if (inflated_type == ns_git::NS_GIT_OBJ_BAD)
-					throw std::runtime_error("inflate type");
-				assert(inflated_offset + inflated_size == inflated.size());
-				// FIXME: compute and check hash before writing?
-				//        see git_odb_hash
+
+				ns_git::NsGitObject obj(ns_git::read_object_memory_ex(std::string(res_blobs.inSizedStr(size), size)));
+
+				NS_STATUS("mainup net objs write");
+
 				git_oid written_oid = {};
-				if (!! git_odb_write(&written_oid, odb.get(), inflated.data() + inflated_offset, inflated_size, (git_otype) inflated_type))
+				if (!! git_odb_write(&written_oid, odb.get(), obj.m_inflated.data() + obj.m_inflated_offset, obj.m_inflated_size, (git_otype) obj.m_type))
 					throw std::runtime_error("inflate write");
 				received_blob_oids.push_back(written_oid);
 			}
