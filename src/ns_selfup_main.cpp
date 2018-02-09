@@ -10,14 +10,12 @@
 #include <utility>
 
 #include <git2.h>
-#include <git2/sys/repository.h>  /* git_repository_new (no backends so custom may be added) */
-#include <git2/sys/mempack.h>     /* in-memory backend */
-#include <git2/sys/memes.h>
 
 #include <selfup/NetworkPacket.h>
 #include <selfup/ns_conf.h>
 #include <selfup/ns_filesys.h>
 #include <selfup/ns_git_aux.h>
+#include <selfup/ns_git_shims.h>
 #include <selfup/ns_gui.h>
 #include <selfup/ns_helpers.h>
 #include <selfup/ns_log.h>
@@ -257,21 +255,19 @@ public:
 		uint32_t res_obj_blen = 0;
 		res_obj_pkt >> res_obj_blen;
 
-		git_buf inflated = {};
-		git_otype inflated_type = GIT_OBJ_BAD;
+		std::string inflated(ns_git::inflatebuf(std::string(res_obj_pkt.inSizedStr(res_obj_blen), res_obj_blen)));
+		ns_git::ns_git_otype inflated_type = ns_git::NS_GIT_OBJ_BAD;
 		size_t inflated_offset = 0;
 		size_t inflated_size = 0;
-		if (!! git_memes_inflate(res_obj_pkt.inSizedStr(res_obj_blen), res_obj_blen, &inflated, &inflated_type, &inflated_offset, &inflated_size))
-			throw std::runtime_error("inflate");
-		if (inflated_type != GIT_OBJ_BLOB)
+		ns_git::memes_get_object_header(inflated, &inflated_type, &inflated_offset, &inflated_size);
+		if (inflated_type != ns_git::NS_GIT_OBJ_BLOB)
 			throw std::runtime_error("inflate type");
-		// FIXME: legacy memes_inflate (as opposed to ns_git::read_object) appends trailing zero so -1
-		assert(inflated_offset + inflated_size == inflated.size - 1);
+		assert(inflated_offset + inflated_size == inflated.size());
 
 		NS_STATUS("selfup net objs write");
 
 		git_oid written_oid = {};
-		if (!! git_blob_create_frombuffer(&written_oid, memory_repository, inflated.ptr + inflated_offset, inflated_size))
+		if (!! git_blob_create_frombuffer(&written_oid, memory_repository, inflated.data() + inflated_offset, inflated_size))
 			throw std::runtime_error("blob create from buffer");
 		if (git_oid_cmp(&written_oid, &missing_obj_oid) != 0)
 			throw std::runtime_error("blob mismatch");
@@ -340,12 +336,16 @@ public:
 
 		NS_STATUS("mainup net headtree");
 
-		git_oid repo_head_tree_oid = getHeadTree(repo.get(), m_ext->m_refname);
+		{
+			RefKill rfk(repo.get(), m_ext->m_refname);
 
-		/* matching versions suggest an update is unnecessary */
+			git_oid repo_head_tree_oid = getHeadTree(repo.get(), m_ext->m_refname);
 
-		if (git_oid_cmp(&repo_head_tree_oid, &res_latest_oid) == 0)
-			return;
+			/* matching versions suggest an update is unnecessary */
+
+			if (git_oid_cmp(&repo_head_tree_oid, &res_latest_oid) == 0)
+				return;
+		}
 
 		/* request list of trees comprising latest version */
 
@@ -372,15 +372,9 @@ public:
 		NS_STATUS("mainup net missing tree determine");
 
 		std::deque<git_oid> missing_tree_oids;
-		for (size_t i = 0; i < res_treelist_treevec.size(); i++) {
-			try {
-				unique_ptr_gittree tree(selfup_git_tree_lookup(repo.get(), &res_treelist_treevec[i]), deleteGittree);
-			}
-			catch (std::exception &) {
-				// FIXME: handle only GIT_ENOTFOUND / missing case here
+		for (size_t i = 0; i < res_treelist_treevec.size(); i++)
+			if (! selfup_git_exists(repo.get(), &res_treelist_treevec[i]))
 				missing_tree_oids.push_back(res_treelist_treevec[i]);
-			}
-		}
 
 		/* request missing trees and write received into the repository */
 
@@ -442,23 +436,10 @@ public:
 
 	git_oid getHeadTree(git_repository *repo, const std::string &refname)
 	{
-		git_oid oid_zero = {};
-		git_oid repo_head_commit_oid = {};
-		git_oid repo_head_tree_oid = {};
-		
-		int err = git_reference_name_to_id(&repo_head_commit_oid, repo, refname.c_str());
-		if (!!err && err != GIT_ENOTFOUND)
-			throw std::runtime_error("refname id");
-		
-		if (err == GIT_ENOTFOUND) {
-			git_oid_cpy(&repo_head_tree_oid, &oid_zero);
-		}
-		else {
-			unique_ptr_gitcommit commit_head(selfup_git_commit_lookup(repo, &repo_head_commit_oid), deleteGitcommit);
-			unique_ptr_gittree   commit_tree(selfup_git_commit_tree(commit_head.get()), deleteGittree);
-			git_oid_cpy(&repo_head_tree_oid, git_tree_id(commit_tree.get()));
-		}
-		return repo_head_tree_oid;
+		git_oid oid_head(selfup_git_reference_name_to_id(repo, refname));
+		unique_ptr_gitcommit commit_head(selfup_git_commit_lookup(repo, &oid_head), deleteGitcommit);
+		unique_ptr_gittree   commit_tree(selfup_git_commit_tree(commit_head.get()), deleteGittree);
+		return *git_tree_id(commit_tree.get());
 	}
 
 	git_oid writeCommitDummy(git_repository *repo, git_oid tree_oid)
@@ -524,23 +505,21 @@ public:
 			uint8_t res_blobs_cmd = readGetCmd(&res_blobs);
 			NS_STATUS("mainup net objs res");
 			if (res_blobs_cmd == SELFUP_CMD_RESPONSE_OBJS3) {
+				NS_STATUS("mainup net objs write");
 				uint32_t size = 0;
 				res_blobs >> size;
-				git_buf inflated = {};
-				git_otype inflated_type = GIT_OBJ_BAD;
+				std::string inflated(ns_git::inflatebuf(std::string(res_blobs.inSizedStr(size), size)));
+				ns_git::ns_git_otype inflated_type = ns_git::NS_GIT_OBJ_BAD;
 				size_t inflated_offset = 0;
 				size_t inflated_size = 0;
-				if (!! git_memes_inflate(res_blobs.inSizedStr(size), size, &inflated, &inflated_type, &inflated_offset, &inflated_size))
-					throw std::runtime_error("inflate");
-				if (inflated_type == GIT_OBJ_BAD)
+				ns_git::memes_get_object_header(inflated, &inflated_type, &inflated_offset, &inflated_size);
+				if (inflated_type == ns_git::NS_GIT_OBJ_BAD)
 					throw std::runtime_error("inflate type");
-				// FIXME: legacy memes_inflate (as opposed to ns_git::read_object) appends trailing zero so -1
-				assert(inflated_offset + inflated_size == inflated.size - 1);
-				NS_STATUS("mainup net objs write");
+				assert(inflated_offset + inflated_size == inflated.size());
 				// FIXME: compute and check hash before writing?
 				//        see git_odb_hash
 				git_oid written_oid = {};
-				if (!! git_odb_write(&written_oid, odb.get(), inflated.ptr + inflated_offset, inflated_size, inflated_type))
+				if (!! git_odb_write(&written_oid, odb.get(), inflated.data() + inflated_offset, inflated_size, (git_otype) inflated_type))
 					throw std::runtime_error("inflate write");
 				received_blob_oids.push_back(written_oid);
 			}

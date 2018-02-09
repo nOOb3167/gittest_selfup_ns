@@ -185,6 +185,12 @@ git_odb * selfup_git_repository_odb(git_repository * repository)
 	return p;
 }
 
+bool selfup_git_exists(git_repository * repository, git_oid * oid)
+{
+	unique_ptr_gitodb odb(selfup_git_repository_odb(repository), deleteGitodb);
+	return !! git_odb_exists(odb.get(), oid);
+}
+
 git_treebuilder * selfup_git_treebuilder_new(git_repository * repository)
 {
 	git_treebuilder *p = NULL;

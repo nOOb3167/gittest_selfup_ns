@@ -29,6 +29,7 @@ SET(SELFUP_NS_HEADERS
 	include/selfup/ns_conf.h
 	include/selfup/ns_filesys.h
 	include/selfup/ns_git_aux.h
+	include/selfup/ns_git_shims.h
 	include/selfup/ns_gui.h
 	include/selfup/ns_helpers.h
 	include/selfup/ns_log.h
@@ -94,9 +95,9 @@ ADD_EXECUTABLE(selfup_ns ${SELFUP_NS_HEADERS} ${SELFUP_NS_SOURCES})
 SET_PROPERTY(TARGET selfup_ns PROPERTY SUFFIX ".exe")
 TARGET_COMPILE_DEFINITIONS(selfup_ns PUBLIC _CRT_SECURE_NO_WARNINGS) # grrrr
 TARGET_COMPILE_OPTIONS(selfup_ns PUBLIC /wd4101) # grrrr
-TARGET_LINK_LIBRARIES(selfup_ns Threads::Threads ${LIBGIT2_LIBRARIES} ${SHLWAPI_LIBRARIES})
+TARGET_LINK_LIBRARIES(selfup_ns Threads::Threads ${LIBGIT2_LIBRARIES} ${ZLIB_LIBRARIES} ${SHLWAPI_LIBRARIES})
 TARGET_LINK_LIBRARIES(selfup_ns msimg32) # grrrr
-TARGET_INCLUDE_DIRECTORIES(selfup_ns PUBLIC ${CMAKE_BINARY_DIR} ${CMAKE_SOURCE_DIR}/include ${LIBGIT2_INCLUDE_DIR})
+TARGET_INCLUDE_DIRECTORIES(selfup_ns PUBLIC ${CMAKE_BINARY_DIR} ${CMAKE_SOURCE_DIR}/include ${LIBGIT2_INCLUDE_DIR} ${ZLIB_INCLUDE_DIR})
 ENDIF()
 
 ADD_EXECUTABLE(serv_ns ${SERV_NS_HEADERS} ${SERV_NS_SOURCES})

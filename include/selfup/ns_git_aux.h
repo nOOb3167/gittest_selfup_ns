@@ -53,6 +53,8 @@ git_repository * selfup_git_memory_repository_new();
 
 git_odb * selfup_git_repository_odb(git_repository *repository);
 
+bool selfup_git_exists(git_repository * repository, git_oid * oid);
+
 git_treebuilder * selfup_git_treebuilder_new(git_repository * repository);
 
 git_signature * selfup_git_signature_new_dummy();

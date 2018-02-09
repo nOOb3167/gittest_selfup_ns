@@ -19,6 +19,7 @@
 namespace ns_git
 {
 
+/* keep enum value compatibility with libgit2 for interop */
 typedef enum {
 	NS_GIT_OBJ_BAD = -1,
 	NS_GIT_OBJ_COMMIT = 1,
