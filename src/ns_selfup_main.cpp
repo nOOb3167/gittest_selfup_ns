@@ -34,7 +34,7 @@
 
 /* NOTE: attempting to exit with non-joined std::threads causes abort() */
 /* NOTE: main() must not leak exceptions due to reliance on stack unwinding (see RefKill) */
-#define NS_TOPLEVEL_CATCH(funcname, retname) do { try { funcname(); } catch (const std::exception &e) { retname = 1; } } while(0)
+#define NS_TOPLEVEL_CATCH(retname, funcname, ...) do { try { funcname(__VA_ARGS__); } catch (const std::exception &e) { retname = 1; } } while(0)
 
 int g_selfup_selfupdate_skip_fileops = 1;
 
@@ -678,11 +678,9 @@ void selfup_start_crank(Address addr)
 	NS_STATUS("selfup filesys end");
 }
 
-void toplevel()
+void toplevel(Address addr)
 {
 	NS_STATUS("startup");
-
-	Address addr(AF_INET, g_conf->getDec("serv_port"), g_conf->getHex("serv_conn_addr"), address_ipv4_tag_t());
 
 	selfup_start_crank(addr);
 	selfup_start_mainupdate_crank(addr);
@@ -691,12 +689,12 @@ void toplevel()
 	g_gui_ctx->join();
 
 	NS_STATUS("shutdown");
-
-	NS_LOGDUMP(addr, 0x04030201);
 }
 
 int main(int argc, char **argv)
 {
+	int ret = 0;
+
 	tcpthreaded_startup_helper();
 
 	if (git_libgit2_init() < 0)
@@ -707,9 +705,12 @@ int main(int argc, char **argv)
 	ns_gui::GuiCtx::initGlobal();
 	g_gui_ctx->start();
 
-	int ret = 0;
+	Address addr(AF_INET, g_conf->getDec("serv_port"), g_conf->getHex("serv_conn_addr"), address_ipv4_tag_t());
 
-	NS_TOPLEVEL_CATCH(toplevel, ret);
+	NS_TOPLEVEL_CATCH(ret, toplevel, addr);
+
+	if (!! ret)
+		NS_LOGDUMP(addr, 0x04030201);
 
 	if (ret == 0)
 		return EXIT_SUCCESS;
