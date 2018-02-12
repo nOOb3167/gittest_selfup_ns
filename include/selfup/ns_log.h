@@ -18,6 +18,16 @@
 class NsLog;
 extern std::unique_ptr<NsLog> g_log;
 
+class NsLogTls
+{
+public:
+	virtual ~NsLogTls() {};
+	virtual std::string & virtualGetIdent() { return m_empty; };
+
+private:
+	std::string m_empty;
+};
+
 class NsLog
 {
 public:
@@ -32,6 +42,8 @@ public:
 	void srvLogPf(const char *cpp_file, int cpp_line, const char *format, ...);
 
 	static void initGlobal();
+
+	static void threadInitTls(NsLogTls *log_tls);
 
 private:
 	std::mutex   m_mutex;

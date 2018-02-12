@@ -11,6 +11,7 @@
 #include <memory>
 #include <mutex>
 #include <stdexcept>
+#include <string>
 #include <thread>
 #include <utility>
 #include <vector>
@@ -40,6 +41,26 @@ void tcpthreaded_blocking_sendfile_helper(int fd, int fdfile, size_t size);
 unique_ptr_fd tcpthreaded_file_open_size_helper(const std::string &filename, size_t *o_size);
 void tcpthreaded_file_close_helper(int *fd);
 void tcpthreaded_startup_helper();
+
+class NsLogTlsServ : public NsLogTls
+{
+public:
+	NsLogTlsServ(size_t thread_idx) :
+		m_thread_idx_s()
+	{
+		m_thread_idx_s.append("[");
+		m_thread_idx_s.append(std::to_string(thread_idx));
+		m_thread_idx_s.append("] ");
+	}
+
+	virtual std::string & virtualGetIdent() override
+	{
+		return m_thread_idx_s;
+	}
+
+private:
+	std::string m_thread_idx_s;
+};
 
 class TimeoutExc : public std::runtime_error
 {
@@ -182,6 +203,8 @@ protected:
 	void threadFuncListenLoop()
 	{
 		try {
+			g_log->threadInitTls(new NsLogTlsServ(0xFFFFFFFF));
+
 			threadFuncListenLoop2();
 		}
 		catch (std::exception &) {
@@ -207,6 +230,8 @@ protected:
 	void threadFunc(const std::shared_ptr<ThreadCtx> &ctx)
 	{
 		try {
+			g_log->threadInitTls(new NsLogTlsServ(ctx->m_thread_idx));
+
 			threadFunc2(ctx);
 		}
 		catch (std::exception &e) {

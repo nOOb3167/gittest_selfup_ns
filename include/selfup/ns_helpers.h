@@ -28,6 +28,12 @@
 
 #define SELFUP_SELFUPDATE_BLOB_ENTRY_FILENAME "selfup_ns.exe"
 
+#if defined (_MSC_VER)
+#  define NS_THREAD_LOCAL_DESIGNATOR __declspec( thread )
+#else
+#  define NS_THREAD_LOCAL_DESIGNATOR __thread
+#endif
+
 char decode_hex_char(const char hex_char);
 std::string decode_hex(const std::string &hex, bool web_programmer_designed_swapped_hex_mental_illness);
 std::string encode_hex(const std::string &bin, bool web_programmer_designed_swapped_hex_mental_illness);
