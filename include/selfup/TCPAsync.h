@@ -32,6 +32,7 @@ typedef ::std::shared_ptr<int>                   shared_ptr_fd;
 
 void tcpthreaded_socket_close_helper(int *fd);
 unique_ptr_fd tcpthreaded_socket_helper();
+Address tcpthreaded_socket_peer_helper(int fd);
 unique_ptr_fd tcpthreaded_socket_listen_helper(Address addr);
 unique_ptr_fd tcpthreaded_socket_accept_helper(int fd);
 void tcpthreaded_socket_connect_helper(int fd, Address addr);
@@ -217,7 +218,9 @@ protected:
 		while (true) {
 			unique_ptr_fd nsock(tcpthreaded_socket_accept_helper(*m_listen));
 
-			NS_SOG_PF("accept");
+			Address peer = tcpthreaded_socket_peer_helper(*nsock);
+
+			NS_SOG_PF("accept [%#.8X:%h.4u]", peer.getAddr4() , peer.getPort());
 
 			{
 				std::unique_lock<std::mutex> lock(m_queue_mutex);
@@ -238,7 +241,7 @@ protected:
 			m_thread_exc.at(ctx->m_thread_idx) = std::current_exception();
 		}
 	}
-
+	
 	void threadFunc2(const std::shared_ptr<ThreadCtx> &ctx)
 	{
 		while (true) {
@@ -247,8 +250,10 @@ protected:
 			unique_ptr_fd fd = std::move(m_queue_incoming.front());
 			m_queue_incoming.pop_front();
 			lock.unlock();
+			
+			Address peer = tcpthreaded_socket_peer_helper(*fd);
 
-			NS_SOG_PF("connect");
+			NS_SOG_PF("connect [%#.8X:%h.4u]", peer.getAddr4(), peer.getPort());
 
 			try {
 				while (true) {
@@ -328,6 +333,18 @@ unique_ptr_fd tcpthreaded_socket_helper()
 	return sock;
 }
 
+Address tcpthreaded_socket_peer_helper(int fd)
+{
+	struct sockaddr_in sockaddr = {};
+	int socklen = sizeof sockaddr;
+	if (getpeername(fd, (struct sockaddr *) &sockaddr, &socklen) < 0)
+		throw std::runtime_error("getpeername");
+	if (sockaddr.sin_family != AF_INET)
+		throw std::runtime_error("getpeername family");
+	Address addr(sockaddr.sin_family, ntohs(sockaddr.sin_port), ntohl(sockaddr.sin_addr.s_addr), address_ipv4_tag_t());
+	return addr;
+}
+
 unique_ptr_fd tcpthreaded_socket_listen_helper(Address addr)
 {
 	unique_ptr_fd sock(new int(socket(AF_INET, SOCK_STREAM, IPPROTO_TCP)), TCPSocket::deleteFd);
@@ -347,7 +364,7 @@ unique_ptr_fd tcpthreaded_socket_listen_helper(Address addr)
 unique_ptr_fd tcpthreaded_socket_accept_helper(int fd)
 {
 	struct sockaddr_in sockaddr = {};
-	int socklen = sizeof sockaddr; // FIXME: socklen_t for NIX
+	int socklen = sizeof sockaddr;
 	unique_ptr_fd nsock(new int(accept(fd, (struct sockaddr *) &sockaddr, &socklen)), TCPSocket::deleteFd);
 	if (*nsock < 0)
 		throw std::runtime_error("accept");
@@ -505,6 +522,18 @@ unique_ptr_fd tcpthreaded_socket_helper()
 	if (*sock < 0)
 		throw std::runtime_error("socket");
 	return sock;
+}
+
+Address tcpthreaded_socket_peer_helper(int fd)
+{
+	struct sockaddr_in sockaddr = {};
+	socklen_t socklen = sizeof sockaddr;
+	if (getpeername(fd, (struct sockaddr *) &sockaddr, &socklen) < 0)
+		throw std::runtime_error("getpeername");
+	if (sockaddr.sin_family != AF_INET)
+		throw std::runtime_error("getpeername family");
+	Address addr(sockaddr.sin_family, ntohs(sockaddr.sin_port), ntohl(sockaddr.sin_addr.s_addr), address_ipv4_tag_t());
+	return addr;
 }
 
 unique_ptr_fd tcpthreaded_socket_listen_helper(Address addr)
