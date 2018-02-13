@@ -4,6 +4,7 @@
 #include <map>
 #include <memory>
 #include <stdexcept>
+#include <string>
 #include <thread>
 #include <utility>
 
@@ -15,6 +16,17 @@
 #include <selfup/TCPAsync.h>
 
 #define SERVUP_THREAD_NUM 1
+
+#define NS_TOPLEVEL_CATCH_SERV(retname, funcname, ...)	\
+	do {											\
+		try {										\
+			funcname(__VA_ARGS__);					\
+		} catch (const std::exception &e) {			\
+			retname = 1;							\
+			std::string msg(e.what());				\
+			NS_SOG_PF("%s", e.what());				\
+		}											\
+	} while(0)
 
 using namespace ns_git;
 
@@ -204,22 +216,33 @@ private:
 
 void servup_start_crank(Address addr)
 {
+	NS_SOG_PF("startup");
+
 	std::string repopath = ns_filesys::current_executable_relative_filename("serv_repo/.git");
 	std::shared_ptr<ServupConExt2> ext(new ServupConExt2(repopath));
 	std::unique_ptr<ServupWork2> work(new ServupWork2(addr, SERVUP_THREAD_NUM, ext));
 	work->start();
 	work->startConfirm();
 	work->join();
+
+	NS_SOG_PF("shutdown");
 }
 
 int main(int argc, char **argv)
 {
+	int ret = 0;
+
+	tcpthreaded_startup_helper();
+
 	ns_conf::Conf::initGlobal();
 	NsLog::initGlobal();
 
-	tcpthreaded_startup_helper();
 	Address addr(AF_INET, g_conf->getDec("serv_port"), g_conf->getHex("serv_bind_addr"), address_ipv4_tag_t());
-	servup_start_crank(addr);
 
-	return EXIT_SUCCESS;
+	NS_TOPLEVEL_CATCH_SERV(ret, servup_start_crank, addr);
+
+	if (ret == 0)
+		return EXIT_SUCCESS;
+	else
+		return EXIT_FAILURE;
 }

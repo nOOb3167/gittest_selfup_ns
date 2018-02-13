@@ -34,7 +34,16 @@
 
 /* NOTE: attempting to exit with non-joined std::threads causes abort() */
 /* NOTE: main() must not leak exceptions due to reliance on stack unwinding (see RefKill) */
-#define NS_TOPLEVEL_CATCH(retname, funcname, ...) do { try { funcname(__VA_ARGS__); } catch (const std::exception &e) { retname = 1; } } while(0)
+#define NS_TOPLEVEL_CATCH_SELFUP(retname, funcname, ...)	\
+	do {											\
+		try {										\
+			funcname(__VA_ARGS__);					\
+		} catch (const std::exception &e) {			\
+			retname = 1;							\
+			std::string msg(e.what());				\
+			NS_LOG_SZ(msg.data(), msg.size());		\
+		}											\
+	} while(0)
 
 int g_selfup_selfupdate_skip_fileops = 1;
 
@@ -702,12 +711,13 @@ int main(int argc, char **argv)
 
 	ns_conf::Conf::initGlobal();
 	NsLog::initGlobal();
+
 	ns_gui::GuiCtx::initGlobal();
 	g_gui_ctx->start();
 
 	Address addr(AF_INET, g_conf->getDec("serv_port"), g_conf->getHex("serv_conn_addr"), address_ipv4_tag_t());
 
-	NS_TOPLEVEL_CATCH(ret, toplevel, addr);
+	NS_TOPLEVEL_CATCH_SELFUP(ret, toplevel, addr);
 
 	if (!! ret)
 		NS_LOGDUMP(addr, 0x04030201);
