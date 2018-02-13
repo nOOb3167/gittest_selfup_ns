@@ -233,6 +233,8 @@ int main(int argc, char **argv)
 	ns_conf::Conf::initGlobal();
 	NsLog::initGlobal();
 
+	g_tcpasync_disable_timeout = g_conf->getDec("tcpasync_disable_timeout");
+
 	Address addr(AF_INET, g_conf->getDec("serv_port"), g_conf->getHex("serv_bind_addr"), address_ipv4_tag_t());
 
 	NS_TOPLEVEL_CATCH_SERV(ret, toplevel, addr);

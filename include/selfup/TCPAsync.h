@@ -24,7 +24,7 @@
 #define TCPASYNC_SENDFILE_COUNT_PARAM 524288
 #define TCPASYNC_ACCEPT_RCVTIMEO_MSEC 30000
 
-int g_tcpasync_disable_timeout = 1;
+int g_tcpasync_disable_timeout = 0;
 
 /* https://msdn.microsoft.com/en-us/library/windows/desktop/ms740516(v=vs.85).aspx */
 typedef ::std::unique_ptr<int, void(*)(int *fd)> unique_ptr_fd;
