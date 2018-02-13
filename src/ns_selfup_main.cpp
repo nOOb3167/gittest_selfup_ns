@@ -661,8 +661,6 @@ void selfup_start_crank(Address addr)
 
 	std::string temp_filename = ns_filesys::build_modified_filename(
 		cur_exe_filename, "", ".exe", "_helper", ".exe");
-	std::string old_filename = ns_filesys::build_modified_filename(
-		cur_exe_filename, "", ".exe", "_helper_old", ".exe");
 
 	if (g_selfup_selfupdate_skip_fileops)
 		return;
@@ -677,7 +675,6 @@ void selfup_start_crank(Address addr)
 
 	NS_STATUS("selfup filesys rename");
 
-	ns_filesys::rename_file_file(cur_exe_filename, old_filename);
 	ns_filesys::rename_file_file(temp_filename, cur_exe_filename);
 
 	NS_STATUS("selfup filesys reexec");
