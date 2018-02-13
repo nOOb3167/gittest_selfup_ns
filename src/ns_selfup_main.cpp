@@ -45,7 +45,7 @@
 		}											\
 	} while(0)
 
-int g_selfup_selfupdate_skip_fileops = 1;
+int g_selfup_selfupdate_skip_fileops = 0;
 
 long long selfup_timestamp()
 {
@@ -713,6 +713,7 @@ int main(int argc, char **argv)
 	g_gui_ctx->start();
 
 	g_tcpasync_disable_timeout = g_conf->getDec("tcpasync_disable_timeout");
+	g_selfup_selfupdate_skip_fileops = g_conf->getDec("selfupdate_skip_fileops");
 
 	Address addr(AF_INET, g_conf->getDec("serv_port"), g_conf->getHex("serv_conn_addr"), address_ipv4_tag_t());
 
