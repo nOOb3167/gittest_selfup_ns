@@ -209,12 +209,17 @@ private:
 
 void servup_start_crank(Address addr)
 {
-	NS_SOG_PF("startup");
-
 	std::string repopath = ns_filesys::current_executable_relative_filename("serv_repo/.git");
 	std::shared_ptr<ServupConExt2> ext(new ServupConExt2(repopath));
 	std::unique_ptr<ServupWork2> work(new ServupWork2(addr, SERVUP_THREAD_NUM, ext));
 	work->run();
+}
+
+void toplevel(Address addr)
+{
+	NS_SOG_PF("startup");
+
+	servup_start_crank(addr);
 
 	NS_SOG_PF("shutdown");
 }
@@ -230,7 +235,7 @@ int main(int argc, char **argv)
 
 	Address addr(AF_INET, g_conf->getDec("serv_port"), g_conf->getHex("serv_bind_addr"), address_ipv4_tag_t());
 
-	NS_TOPLEVEL_CATCH_SERV(ret, servup_start_crank, addr);
+	NS_TOPLEVEL_CATCH_SERV(ret, toplevel, addr);
 
 	if (ret == 0)
 		return EXIT_SUCCESS;
