@@ -97,19 +97,14 @@ public:
 		m_ext(ext)
 	{}
 
-	void start()
+	void run()
 	{
+		/* start */
 		m_thrd->setFrameDispatch(std::bind(&ServupWork2::frameDispatch, this, std::placeholders::_1, std::placeholders::_2));
 		m_thrd->startBoth();
-	}
-
-	void startConfirm()
-	{
+		/* start confirm */
 		ns_sd_notify(0, "READY=1");
-	}
-
-	void join()
-	{
+		/* join */
 		m_thrd->joinBoth();
 	}
 
@@ -219,9 +214,7 @@ void servup_start_crank(Address addr)
 	std::string repopath = ns_filesys::current_executable_relative_filename("serv_repo/.git");
 	std::shared_ptr<ServupConExt2> ext(new ServupConExt2(repopath));
 	std::unique_ptr<ServupWork2> work(new ServupWork2(addr, SERVUP_THREAD_NUM, ext));
-	work->start();
-	work->startConfirm();
-	work->join();
+	work->run();
 
 	NS_SOG_PF("shutdown");
 }
