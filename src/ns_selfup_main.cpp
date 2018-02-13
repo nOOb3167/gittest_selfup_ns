@@ -238,7 +238,7 @@ public:
 
 		unique_ptr_gitblob blob(selfup_git_blob_lookup(memory_repository.get(), &res_latest_oid), deleteGitblob);
 
-		std::unique_ptr<std::string> update_buffer(new std::string((char *) git_blob_rawcontent(blob.get()), git_blob_rawsize(blob.get())));
+		std::unique_ptr<std::string> update_buffer(new std::string((char *) git_blob_rawcontent(blob.get()), (size_t) git_blob_rawsize(blob.get())));
 
 		m_ext->confirmUpdate(std::move(update_buffer));
 
