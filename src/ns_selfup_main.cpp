@@ -694,9 +694,6 @@ void toplevel(Address addr)
 	selfup_start_crank(addr);
 	selfup_start_mainupdate_crank(addr);
 
-	g_gui_ctx->stopRequest();
-	g_gui_ctx->join();
-
 	NS_STATUS("shutdown");
 }
 
@@ -718,6 +715,9 @@ int main(int argc, char **argv)
 	Address addr(AF_INET, g_conf->getDec("serv_port"), g_conf->getHex("serv_conn_addr"), address_ipv4_tag_t());
 
 	NS_TOPLEVEL_CATCH_SELFUP(ret, toplevel, addr);
+
+	g_gui_ctx->stopRequest();
+	g_gui_ctx->join();
 
 	if (!! ret)
 		NS_LOGDUMP(addr, 0x04030201);
