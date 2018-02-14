@@ -13,6 +13,7 @@
 
 #include <selfup/NetworkPacket.h>
 #include <selfup/ns_conf.h>
+#include <selfup/ns_crash.h>
 #include <selfup/ns_filesys.h>
 #include <selfup/ns_git_aux.h>
 #include <selfup/ns_git_shims.h>
@@ -713,6 +714,8 @@ int main(int argc, char **argv)
 	g_selfup_selfupdate_skip_fileops = g_conf->getDec("selfupdate_skip_fileops");
 
 	Address addr(AF_INET, g_conf->getDec("serv_port"), g_conf->getHex("serv_conn_addr"), address_ipv4_tag_t());
+
+	ns_crash_handler_setup(addr);
 
 	NS_TOPLEVEL_CATCH_SELFUP(ret, toplevel, addr);
 

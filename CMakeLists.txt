@@ -27,6 +27,7 @@ NS_GENERATE_HEADER(g_conf_builtin_str ${CMAKE_SOURCE_DIR}/data/ns_conf_builtin.c
 SET(SELFUP_NS_HEADERS
 	include/selfup/NetworkPacket.h
 	include/selfup/ns_conf.h
+	include/selfup/ns_crash.h
 	include/selfup/ns_filesys.h
 	include/selfup/ns_git_aux.h
 	include/selfup/ns_git_shims.h
@@ -43,6 +44,7 @@ SET(SELFUP_NS_HEADERS
 SET(SELFUP_NS_SOURCES
 	src/NetworkPacket.cpp
 	src/ns_conf.cpp
+	src/ns_crash.cpp
 	src/ns_filesys.cpp
 	src/ns_git_aux.cpp
 	src/ns_gui.cpp
@@ -51,6 +53,8 @@ SET(SELFUP_NS_SOURCES
 	src/ns_log.cpp
 	src/ns_systemd.cpp
 	src/ns_selfup_main.cpp
+	src/TCPAddress.cpp
+	src/TCPAsync.cpp
 )
 
 SET(SERV_NS_HEADERS
@@ -73,6 +77,8 @@ SET(SERV_NS_SOURCES
 	src/ns_log.cpp
 	src/ns_serv_main.cpp
 	src/ns_systemd.cpp
+	src/TCPAddress.cpp
+	src/TCPAsync.cpp
 )
 
 SET(ZLIB_INCLUDE_DIR "-NOTFOUND" CACHE PATH "ZLIB include dir")
