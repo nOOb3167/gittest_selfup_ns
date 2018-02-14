@@ -167,7 +167,7 @@ public:
 			ns_git_oid requested_oid = {};
 			memcpy(requested_oid.id, packet->inSizedStr(NS_GIT_OID_RAWSZ), NS_GIT_OID_RAWSZ);
 
-			std::shared_ptr<ServupCache::Head> &head = m_ext->m_cache->getRefreshHeadOid(m_ext->m_repopath, requested_oid);
+			std::shared_ptr<ServupCache::Head> head = m_ext->m_cache->getRefreshHeadOid(m_ext->m_repopath, requested_oid);
 
 			NetworkPacket res_treelist_pkt(SELFUP_CMD_RESPONSE_TREELIST, networkpacket_cmd_tag_t());
 			res_treelist_pkt << (uint32_t) head->m_treeoids_num;
