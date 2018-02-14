@@ -21,6 +21,10 @@ extern std::unique_ptr<NsLog> g_log;
 class NsLogTls
 {
 public:
+	NsLogTls() :
+		m_empty()
+	{}
+
 	virtual ~NsLogTls() {};
 	virtual std::string & virtualGetIdent() { return m_empty; };
 

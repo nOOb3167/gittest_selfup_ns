@@ -75,6 +75,7 @@ void NsLog::initGlobal()
 	std::unique_ptr<NsLog> log(new NsLog());
 	std::lock_guard<std::mutex> lock(log->getMutex());
 	g_log = std::move(log);
+	NsLog::threadInitTls(new NsLogTls());
 }
 
 void NsLog::threadInitTls(NsLogTls * log_tls)

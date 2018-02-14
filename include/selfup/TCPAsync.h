@@ -29,6 +29,7 @@ typedef ::std::shared_ptr<int>                   shared_ptr_fd;
 class NsLogTlsServ : public NsLogTls
 {
 public:
+	NsLogTlsServ(const std::string &thread_idx_s);
 	NsLogTlsServ(size_t thread_idx);
 
 	virtual std::string & virtualGetIdent() override;

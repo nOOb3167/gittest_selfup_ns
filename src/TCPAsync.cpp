@@ -26,6 +26,10 @@ TimeoutExc::TimeoutExc(const char * msg) :
 	std::runtime_error(msg)
 {}
 
+NsLogTlsServ::NsLogTlsServ(const std::string &thread_idx_s) :
+  m_thread_idx_s(thread_idx_s)
+{}
+
 NsLogTlsServ::NsLogTlsServ(size_t thread_idx) :
 	m_thread_idx_s()
 {
@@ -143,7 +147,7 @@ void TCPThreaded::joinBoth()
 void TCPThreaded::threadFuncListenLoop()
 {
 	try {
-		g_log->threadInitTls(new NsLogTlsServ(0xFFFFFFFF));
+		g_log->threadInitTls(new NsLogTlsServ("[-] "));
 
 		threadFuncListenLoop2();
 	}
@@ -159,7 +163,7 @@ void TCPThreaded::threadFuncListenLoop2()
 
 		Address peer = tcpthreaded_socket_peer_helper(*nsock);
 
-		NS_SOG_PF("accept [%#.8X:%h.4u]", peer.getAddr4(), peer.getPort());
+		NS_SOG_PF("accept [%#.8X:%.4hu]", peer.getAddr4(), peer.getPort());
 
 		{
 			std::unique_lock<std::mutex> lock(m_queue_mutex);
@@ -192,7 +196,7 @@ void TCPThreaded::threadFunc2(const std::shared_ptr<ThreadCtx>& ctx)
 
 		Address peer = tcpthreaded_socket_peer_helper(*fd);
 
-		NS_SOG_PF("connect [%#.8X:%h.4u]", peer.getAddr4(), peer.getPort());
+		NS_SOG_PF("connect [%#.8X:%.4hu]", peer.getAddr4(), peer.getPort());
 
 		try {
 			while (true) {
