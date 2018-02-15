@@ -188,8 +188,6 @@ void rename_file_file(
 	std::string src_filename,
 	std::string dst_filename)
 {
-	int r = 0;
-
 	BOOL ok = MoveFileEx(src_filename.c_str(), dst_filename.c_str(), MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH);
 
 	if (!ok)
