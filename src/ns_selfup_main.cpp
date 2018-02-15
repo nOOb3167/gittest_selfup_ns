@@ -559,6 +559,14 @@ void selfup_reexec_probably_blocking(std::string exe_filename)
 	int ret_ignored = system(command.c_str());
 }
 
+void selfup_mainexec_probably_blocking(std::string exe_filename)
+{
+	std::string command;
+	command.append(exe_filename);
+
+	int ret_ignored = system(command.c_str());
+}
+
 void selfup_checkout(std::string repopath, std::string refname, std::string checkoutpath)
 {
 	NS_STATUS("mainup checkout makedir");
@@ -640,9 +648,11 @@ void selfup_start_mainupdate_crank(Address addr)
 	selfup_checkout(repopath, refname, checkoutpath);
 
 	NS_STATUS("mainup checkout end");
+
+	selfup_mainexec_probably_blocking(ns_filesys::path_append_abs_rel(checkoutpath, "bin/minetest.exe"));
 }
 
-void selfup_start_crank(Address addr)
+bool selfup_start_crank(Address addr)
 {
 	std::string cur_exe_filename = ns_filesys::current_executable_filename();
 	std::shared_ptr<SelfupConExt1> ext(new SelfupConExt1(cur_exe_filename, "refs/heads/selfup"));
@@ -656,7 +666,7 @@ void selfup_start_crank(Address addr)
 	NS_STATUS("selfup net end");
 
 	if (! ext->m_update_have)
-		return;
+		return false;
 
 	NS_STATUS("selfup filesys start");
 
@@ -666,7 +676,7 @@ void selfup_start_crank(Address addr)
 		cur_exe_filename, "", ".exe", "_helper_old", ".exe");
 
 	if (g_selfup_selfupdate_skip_fileops)
-		return;
+		return false;
 
 	NS_STATUS("selfup filesys write");
 
@@ -686,14 +696,16 @@ void selfup_start_crank(Address addr)
 	selfup_reexec_probably_blocking(cur_exe_filename);
 
 	NS_STATUS("selfup filesys end");
+
+	return true;
 }
 
 void toplevel(Address addr)
 {
 	NS_STATUS("startup");
 
-	selfup_start_crank(addr);
-	selfup_start_mainupdate_crank(addr);
+	if (! selfup_start_crank(addr))
+		selfup_start_mainupdate_crank(addr);
 
 	NS_STATUS("shutdown");
 }
