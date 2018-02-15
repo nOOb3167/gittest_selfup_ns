@@ -15,8 +15,6 @@
 #include <selfup/ns_systemd.h>
 #include <selfup/TCPAsync.h>
 
-#define SERVUP_THREAD_NUM 1
-
 #define NS_TOPLEVEL_CATCH_SERV(retname, funcname, ...)	\
 	do {											\
 		try {										\
@@ -27,6 +25,8 @@
 			NS_SOG_PF("%s", e.what());				\
 		}											\
 	} while(0)
+
+int g_servup_thread_num = 1;
 
 using namespace ns_git;
 
@@ -211,7 +211,7 @@ void servup_start_crank(Address addr)
 {
 	std::string repopath = ns_filesys::current_executable_relative_filename("serv_repo/.git");
 	std::shared_ptr<ServupConExt2> ext(new ServupConExt2(repopath));
-	std::unique_ptr<ServupWork2> work(new ServupWork2(addr, SERVUP_THREAD_NUM, ext));
+	std::unique_ptr<ServupWork2> work(new ServupWork2(addr, g_servup_thread_num, ext));
 	work->run();
 }
 
@@ -234,6 +234,7 @@ int main(int argc, char **argv)
 	NsLog::initGlobal();
 
 	g_tcpasync_disable_timeout = g_conf->getDec("tcpasync_disable_timeout");
+	g_servup_thread_num = g_conf->getDec("servup_thread_num");
 
 	Address addr(AF_INET, g_conf->getDec("serv_port"), g_conf->getHex("serv_bind_addr"), address_ipv4_tag_t());
 
