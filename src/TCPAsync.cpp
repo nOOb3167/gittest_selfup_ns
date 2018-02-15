@@ -15,10 +15,10 @@
 
 #include <selfup/ns_helpers.h>
 #include <selfup/ns_log.h>
-
 #include <selfup/NetworkPacket.h>
 #include <selfup/TCPAddress.h>
 #include <selfup/TCPAsync.h>
+#include <selfup/ns_thread.h>
 
 int g_tcpasync_disable_timeout = 0;
 
@@ -146,8 +146,12 @@ void TCPThreaded::joinBoth()
 
 void TCPThreaded::threadFuncListenLoop()
 {
+	std::string name("[-] ");
+
+	ns_thread_name_set_current(name);
+
 	try {
-		g_log->threadInitTls(new NsLogTlsServ("[-] "));
+		g_log->threadInitTls(new NsLogTlsServ(name));
 
 		threadFuncListenLoop2();
 	}
@@ -175,8 +179,12 @@ void TCPThreaded::threadFuncListenLoop2()
 
 void TCPThreaded::threadFunc(const std::shared_ptr<ThreadCtx>& ctx)
 {
+	std::string name = std::string("[") + std::to_string(ctx->m_thread_idx) + std::string("] ");
+
+	ns_thread_name_set_current(name);
+
 	try {
-		g_log->threadInitTls(new NsLogTlsServ(ctx->m_thread_idx));
+		g_log->threadInitTls(new NsLogTlsServ(name));
 
 		threadFunc2(ctx);
 	}
