@@ -61,6 +61,7 @@ SET(SELFUP_NS_SOURCES
 
 SET(SERV_NS_HEADERS
 	include/selfup/ns_conf.h
+	include/selfup/ns_crash.h
 	include/selfup/ns_git_shims.h
 	include/selfup/ns_filesys.h
 	include/selfup/ns_helpers.h
@@ -75,6 +76,7 @@ SET(SERV_NS_HEADERS
 SET(SERV_NS_SOURCES
 	src/NetworkPacket.cpp
 	src/ns_conf.cpp
+	src/ns_crash.cpp
 	src/ns_filesys.cpp
 	src/ns_helpers.cpp
 	src/ns_log.cpp
