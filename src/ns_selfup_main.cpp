@@ -474,6 +474,8 @@ public:
 	/* @missing_obj_oids: will be popped as objects are received - empties completely on success */
 	void requestAndRecvAndWriteObjs(git_repository *repo, std::deque<git_oid> *missing_obj_oids)
 	{
+		size_t missing_initial_size = missing_obj_oids->size();
+
 		size_t missing_obj_request_limit = missing_obj_oids->size();
 		do {
 			NS_STATUS("mainup net objs req");
@@ -493,6 +495,8 @@ public:
 					throw std::runtime_error("unsolicited obj received and written?");
 				missing_obj_oids->pop_front();
 			}
+
+			NS_GUI_MODE_RATIO(missing_obj_oids->size() - missing_initial_size, missing_initial_size);
 
 			missing_obj_request_limit = GS_MIN(missing_obj_oids->size(), received_obj_oids.size() * 2);
 		} while (! missing_obj_oids->empty());
@@ -725,6 +729,7 @@ int main(int argc, char **argv)
 	ns_gui::GuiCtx::initGlobal();
 	g_gui_ctx->start();
 
+	g_crash_mbox = g_conf->getDec("crash_mbox");
 	g_tcpasync_disable_timeout = g_conf->getDec("tcpasync_disable_timeout");
 	g_selfup_selfupdate_skip_fileops = g_conf->getDec("selfupdate_skip_fileops");
 

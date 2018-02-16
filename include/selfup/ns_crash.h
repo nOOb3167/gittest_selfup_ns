@@ -5,6 +5,7 @@
 
 #include <selfup/TCPAddress.h>
 
+extern int g_crash_mbox;
 extern Address  g_crash_addr;
 extern uint32_t g_crash_magic;
 

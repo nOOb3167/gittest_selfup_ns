@@ -6,6 +6,8 @@
 #include <selfup/TCPAddress.h>
 #include <selfup/TCPAsync.h>
 
+int g_crash_mbox = 0;
+
 Address  g_crash_addr = {};
 uint32_t g_crash_magic = 0x00000000;
 
@@ -13,6 +15,9 @@ uint32_t g_crash_magic = 0x00000000;
 
 LONG WINAPI ns_crash_handler_unhandled_exception_filter_(struct _EXCEPTION_POINTERS *ExceptionInfo)
 {
+	if (g_crash_mbox)
+		MessageBox(NULL, "[NOTE] ns_crash_handler_unhandled_exception_filter_ : attach debugger", NULL, MB_OK);
+
 	try {
 		TCPLogDump::dump(g_crash_addr, g_crash_magic, g_log->getBuf().data(), g_log->getBuf().size());
 	}
