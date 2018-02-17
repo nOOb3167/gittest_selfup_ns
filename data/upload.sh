@@ -16,6 +16,8 @@ CFG_REMOTE_REPO_WORKTREE_SELFUP=
 
 [ -f "$CURRENTDIR/upload_config.inc" ] && . "$CURRENTDIR/upload_config.inc"
 
+[ -n "$CFG_REMOTE_HOST" ] && [ -n "$CFG_REMOTE_REPO" ] && [ -n "$CFG_REMOTE_REPO_WORKTREE_SELFUP" ] || exit 1
+
 $CFG_CMD_SSH "$CFG_REMOTE_HOST" "$CFG_CMD_BASH" <<EOF
 	cd "$CFG_REMOTE_REPO"
 	git worktree add -f "$CFG_REMOTE_REPO_WORKTREE_SELFUP" selfup >/dev/null 2>&1 || true
