@@ -5,18 +5,16 @@ set -e
 CURRENTDIR=$(dirname $(readlink -e "$0"))
 [ -d "$CURRENTDIR" ] && cd "$CURRENTDIR" || exit 1;
 
-#CFG_EXELUMP=../bin/selfup_ns.exe
-CFG_EXEPATH=../../tmp2/selfup_ns_release/Release/selfup_ns.exe
+CFG_EXEPATH=../bin/selfup_ns.exe
 CFG_CMD_SSH="ssh -T -e none"
 CFG_CMD_SCP=scp
 CFG_CMD_BASH="bash -e -s"
 
-CFG_REMOTE_HOST=progame@10.55.1.6
-CFG_REMOTE_REPO=/home/progame/gittest/gittest_selfup_ns/serv_repo
-CFG_REMOTE_REPO_WORKTREE_SELFUP=/home/progame/gittest/gittest_selfup_ns/www
-CFG_REMOTE_PATH=/home/progame/gittest/gittest_selfup_ns/tmptmp
+CFG_REMOTE_HOST=
+CFG_REMOTE_REPO=
+CFG_REMOTE_REPO_WORKTREE_SELFUP=
 
-[ -f "$CFG_EXEPATH" ] || exit 1;
+[ -f "$CURRENTDIR/upload_config.inc" ] && . "$CURRENTDIR/upload_config.inc"
 
 $CFG_CMD_SSH "$CFG_REMOTE_HOST" "$CFG_CMD_BASH" <<EOF
 	cd "$CFG_REMOTE_REPO"
