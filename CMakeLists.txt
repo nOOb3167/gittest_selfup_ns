@@ -24,23 +24,28 @@ NS_GENERATE_HEADER(imgpbempty_384_32_ ${CMAKE_SOURCE_DIR}/data/imgpbempty_384_32
 NS_GENERATE_HEADER(imgpbfull_384_32_  ${CMAKE_SOURCE_DIR}/data/imgpbfull_384_32_.data  ${CMAKE_BINARY_DIR}/imgpbfull_384_32_.h)
 NS_GENERATE_HEADER(g_conf_builtin_str ${CMAKE_SOURCE_DIR}/data/ns_conf_builtin.conf       ${CMAKE_BINARY_DIR}/ns_conf_builtin.h)
 
-SET(SELFUP_NS_HEADERS
+SET(COMMON_NS_HEADERS
 	include/selfup/NetworkPacket.h
 	include/selfup/ns_conf.h
 	include/selfup/ns_crash.h
 	include/selfup/ns_filesys.h
-	include/selfup/ns_git_aux.h
 	include/selfup/ns_git_shims.h
-	include/selfup/ns_gui.h
 	include/selfup/ns_helpers.h
 	include/selfup/ns_log.h
 	include/selfup/ns_systemd.h
 	include/selfup/ns_thread.h
 	include/selfup/TCPAddress.h
 	include/selfup/TCPAsync.h
+)
+
+SET(SELFUP_NS_HEADERS
+	${COMMON_NS_HEADERS}
+	include/selfup/ns_git_aux.h
+	include/selfup/ns_gui.h
 	${CMAKE_BINARY_DIR}/imgpbblip_96_32_.h
 	${CMAKE_BINARY_DIR}/imgpbempty_384_32_.h
 	${CMAKE_BINARY_DIR}/imgpbfull_384_32_.h
+	${CMAKE_BINARY_DIR}/ns_conf_builtin.h
 )
 SET(SELFUP_NS_SOURCES
 	src/NetworkPacket.cpp
@@ -60,17 +65,7 @@ SET(SELFUP_NS_SOURCES
 )
 
 SET(SERV_NS_HEADERS
-	include/selfup/ns_conf.h
-	include/selfup/ns_crash.h
-	include/selfup/ns_git_shims.h
-	include/selfup/ns_filesys.h
-	include/selfup/ns_helpers.h
-	include/selfup/ns_log.h
-	include/selfup/ns_systemd.h
-	include/selfup/ns_thread.h
-	include/selfup/NetworkPacket.h
-	include/selfup/TCPAddress.h
-	include/selfup/TCPAsync.h
+	${COMMON_NS_HEADERS}
 	${CMAKE_BINARY_DIR}/ns_conf_builtin.h
 )
 SET(SERV_NS_SOURCES
@@ -123,3 +118,16 @@ IF(WIN32)
 TARGET_LINK_LIBRARIES(serv_ns ws2_32) # grrrr
 ENDIF()
 TARGET_INCLUDE_DIRECTORIES(serv_ns PUBLIC ${CMAKE_BINARY_DIR} ${CMAKE_SOURCE_DIR}/include ${ZLIB_INCLUDE_DIR})
+
+INSTALL(TARGETS selfup_ns serv_ns
+	LIBRARY DESTINATION "lib"
+	RUNTIME DESTINATION "bin"
+	ARCHIVE DESTINATION "lib"
+)
+
+INSTALL(FILES
+	$<TARGET_PDB_FILE:selfup_ns>
+	$<TARGET_PDB_FILE:serv_ns>
+	data/upload.sh
+	DESTINATION "bin"
+)
