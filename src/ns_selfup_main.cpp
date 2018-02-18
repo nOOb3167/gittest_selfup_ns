@@ -509,14 +509,14 @@ public:
 		while (true) {
 			NetworkPacket res_blobs = m_respond->waitFrame();
 			uint8_t res_blobs_cmd = readGetCmd(&res_blobs);
-			NS_STATUS("mainup net objs res");
+			//NS_STATUS("mainup net objs res");
 			if (res_blobs_cmd == SELFUP_CMD_RESPONSE_OBJS3) {
 				uint32_t size = 0;
 				res_blobs >> size;
 
 				ns_git::NsGitObject obj(ns_git::read_object_memory_ex(std::string(res_blobs.inSizedStr(size), size)));
 
-				NS_STATUS("mainup net objs write");
+				//NS_STATUS("mainup net objs write");
 
 				git_oid written_oid = {};
 				if (!! git_odb_write(&written_oid, odb.get(), obj.m_inflated.data() + obj.m_inflated_offset, obj.m_inflated_size, (git_otype) obj.m_type))
