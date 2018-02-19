@@ -718,6 +718,9 @@ int main(int argc, char **argv)
 {
 	int ret = 0;
 
+	if (argc >= 2 && std::string(argv[1]) == SELFUP_ARG_VERSUB)
+		return SELFUP_ARG_VERSUB_SUCCESS_CODE;
+
 	tcpthreaded_startup_helper();
 
 	if (git_libgit2_init() < 0)
