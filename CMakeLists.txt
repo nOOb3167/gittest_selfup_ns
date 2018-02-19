@@ -129,7 +129,9 @@ IF(NS_OPTION_ARCHIVE)
 		POST_BUILD
 		BYPRODUCTS "${NS_ARCHIVE_FILE}"
 		COMMAND "${CMAKE_COMMAND}"
-			-E tar cf "${NS_ARCHIVE_FILE}" --format=zip -- "$<TARGET_FILE:selfup_ns>"
+			-E copy "$<TARGET_FILE:selfup_ns>" "${CMAKE_BINARY_DIR}/selfup_ns.exe"
+		COMMAND "${CMAKE_COMMAND}"
+			-E tar cf "${NS_ARCHIVE_FILE}" --format=zip -- "${CMAKE_BINARY_DIR}/selfup_ns.exe"
 		COMMENT "Generating Archive (${NS_ARCHIVE_FILE})"
 	)
 ENDIF()
