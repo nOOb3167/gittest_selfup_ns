@@ -1,1 +1,2 @@
 data/upload.sh text eol=lf
+data/upload_build.sh text eol=lf
