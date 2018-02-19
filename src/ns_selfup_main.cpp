@@ -634,7 +634,7 @@ unique_ptr_gitrepository selfup_ensure_repository(const std::string &repopath, c
 void selfup_start_mainupdate_crank(Address addr)
 {
 	std::string repopath = ns_filesys::current_executable_relative_filename("clnt_repo/.git");
-	std::string refname = "refs/heads/master";
+	std::string refname = "refs/heads/mainup";
 	std::string checkoutpath = ns_filesys::current_executable_relative_filename("clnt_chkout");
 	selfup_ensure_repository(repopath, ".git");
 	std::shared_ptr<SelfupConExt2> ext(new SelfupConExt2(repopath, refname));
