@@ -25,6 +25,7 @@ ENDFUNCTION()
 NS_GENERATE_HEADER(imgpbblip_96_32_   ${CMAKE_SOURCE_DIR}/data/imgpbblip_96_32_.data   ${CMAKE_BINARY_DIR}/imgpbblip_96_32_.h)
 NS_GENERATE_HEADER(imgpbempty_384_32_ ${CMAKE_SOURCE_DIR}/data/imgpbempty_384_32_.data ${CMAKE_BINARY_DIR}/imgpbempty_384_32_.h)
 NS_GENERATE_HEADER(imgpbfull_384_32_  ${CMAKE_SOURCE_DIR}/data/imgpbfull_384_32_.data  ${CMAKE_BINARY_DIR}/imgpbfull_384_32_.h)
+NS_GENERATE_HEADER(imglogo_100_100_   ${CMAKE_SOURCE_DIR}/data/imglogo_100_100_.data  ${CMAKE_BINARY_DIR}/imglogo_100_100_.h)
 NS_GENERATE_HEADER(g_conf_builtin_str ${CMAKE_SOURCE_DIR}/data/ns_conf_builtin.conf       ${CMAKE_BINARY_DIR}/ns_conf_builtin.h)
 
 SET(COMMON_NS_HEADERS
@@ -48,6 +49,7 @@ SET(SELFUP_NS_HEADERS
 	${CMAKE_BINARY_DIR}/imgpbblip_96_32_.h
 	${CMAKE_BINARY_DIR}/imgpbempty_384_32_.h
 	${CMAKE_BINARY_DIR}/imgpbfull_384_32_.h
+	${CMAKE_BINARY_DIR}/imglogo_100_100_.h
 	${CMAKE_BINARY_DIR}/ns_conf_builtin.h
 )
 SET(SELFUP_NS_SOURCES

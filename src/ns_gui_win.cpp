@@ -14,6 +14,7 @@
 #include <imgpbblip_96_32_.h>
 #include <imgpbempty_384_32_.h>
 #include <imgpbfull_384_32_.h>
+#include <imglogo_100_100_.h>
 
 #define GS_GUI_WIN_MAGIC_MSGNUM (WM_USER + 0x5423)
 
@@ -348,6 +349,7 @@ void win_threadfunc()
 	AuxImgB img_pb_empty = GS_GUI_WIN_READIMAGE_B(hdc_startup->hdc, imgpbempty_384_32_);
 	AuxImgB img_pb_full  = GS_GUI_WIN_READIMAGE_B(hdc_startup->hdc, imgpbfull_384_32_);
 	AuxImgB img_pb_blip  = GS_GUI_WIN_READIMAGE_B(hdc_startup->hdc, imgpbblip_96_32_);
+	AuxImgB img_logo     = GS_GUI_WIN_READIMAGE_B(hdc_startup->hdc, imglogo_100_100_);
 	hdc_startup.reset();
 
 	while (true) {
@@ -370,6 +372,8 @@ void win_threadfunc()
 			win_clear_window(hdc->hwnd, hdc->hdc);
 
 			std::unique_lock<std::mutex> lock(g_gui_ctx->getMutex());
+
+			win_drawimage_mask_b(hdc->hdc, GS_GUI_COLOR_MASK_RGB, &img_logo, 0, 0, img_logo.m_width, img_logo.m_height, 164, 64);
 
 			switch (g_gui_ctx->getProgress().m_mode)
 			{
