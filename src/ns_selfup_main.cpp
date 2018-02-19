@@ -672,15 +672,15 @@ bool selfup_start_crank(Address addr)
 	if (! ext->m_update_have)
 		return false;
 
+	if (g_selfup_selfupdate_skip_fileops)
+		return false;
+
 	NS_STATUS("selfup filesys start");
 
 	std::string temp_filename = ns_filesys::build_modified_filename(
 		cur_exe_filename, "", ".exe", "_helper", ".exe");
 	std::string old_filename = ns_filesys::build_modified_filename(
 		cur_exe_filename, "", ".exe", "_helper_old", ".exe");
-
-	if (g_selfup_selfupdate_skip_fileops)
-		return false;
 
 	NS_STATUS("selfup filesys write");
 
@@ -720,6 +720,9 @@ int main(int argc, char **argv)
 
 	if (argc >= 2 && std::string(argv[1]) == SELFUP_ARG_VERSUB)
 		return SELFUP_ARG_VERSUB_SUCCESS_CODE;
+
+	if (argc >= 2 && std::string(argv[1]) == SELFUP_ARG_CHILD)
+		(void) 0;
 
 	tcpthreaded_startup_helper();
 
