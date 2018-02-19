@@ -1,4 +1,4 @@
-#!/usr/bin/bash -x
+#!/usr/bin/bash
 
 set -e
 
@@ -23,6 +23,8 @@ if which cygpath ; then
 	CMAKE_SOURCE_DIR_ABS=$(cygpath -m "$CMAKE_SOURCE_DIR_ABS")
 	CMAKE_BUILD_DIR_ABS=$(cygpath -m "$CMAKE_BUILD_DIR_ABS")
 fi
+
+echo "$CFG_CMD_CMAKE"
 
 "$CFG_CMD_CMAKE" --build "$CMAKE_BUILD_DIR_ABS" --config "$CFG_CMAKE_BUILD_CONFIG"
 
