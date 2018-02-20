@@ -474,7 +474,8 @@ public:
 	/* @missing_obj_oids: will be popped as objects are received - empties completely on success */
 	void requestAndRecvAndWriteObjs(git_repository *repo, std::deque<git_oid> *missing_obj_oids)
 	{
-		size_t missing_initial_size = missing_obj_oids->size();
+		size_t gui_missing_initial_size = missing_obj_oids->size();
+		size_t gui_received_count = 0;
 
 		size_t missing_obj_request_limit = missing_obj_oids->size();
 		do {
@@ -486,7 +487,7 @@ public:
 				req_objs.outSizedStr((char *) (*missing_obj_oids)[i].id, GIT_OID_RAWSZ);
 			m_respond->respondOneshot(std::move(req_objs));
 
-			std::vector<git_oid> received_obj_oids = recvAndWriteObjsUntilDone(repo);
+			std::vector<git_oid> received_obj_oids = recvAndWriteObjsUntilDone(repo, gui_missing_initial_size, &gui_received_count);
 
 			NS_STATUS("mainup net objs chk");
 
@@ -496,32 +497,30 @@ public:
 				missing_obj_oids->pop_front();
 			}
 
-			NS_GUI_MODE_RATIO(missing_obj_oids->size() - missing_initial_size, missing_initial_size);
-
 			missing_obj_request_limit = GS_MIN(missing_obj_oids->size(), received_obj_oids.size() * 2);
 		} while (! missing_obj_oids->empty());
 	}
 
-	std::vector<git_oid> recvAndWriteObjsUntilDone(git_repository *repo)
+	std::vector<git_oid> recvAndWriteObjsUntilDone(git_repository *repo, size_t gui_missing_initial_size, size_t *gui_received_count)
 	{
 		std::vector<git_oid> received_blob_oids;
 		unique_ptr_gitodb odb(selfup_git_repository_odb(repo), deleteGitodb);
 		while (true) {
 			NetworkPacket res_blobs = m_respond->waitFrame();
 			uint8_t res_blobs_cmd = readGetCmd(&res_blobs);
-			//NS_STATUS("mainup net objs res");
+
 			if (res_blobs_cmd == SELFUP_CMD_RESPONSE_OBJS3) {
 				uint32_t size = 0;
 				res_blobs >> size;
 
 				ns_git::NsGitObject obj(ns_git::read_object_memory_ex(std::string(res_blobs.inSizedStr(size), size)));
 
-				//NS_STATUS("mainup net objs write");
-
 				git_oid written_oid = {};
 				if (!! git_odb_write(&written_oid, odb.get(), obj.m_inflated.data() + obj.m_inflated_offset, obj.m_inflated_size, (git_otype) obj.m_type))
 					throw std::runtime_error("inflate write");
 				received_blob_oids.push_back(written_oid);
+
+				NS_GUI_MODE_RATIO(gui_missing_initial_size - (*gui_received_count)++, gui_missing_initial_size);
 			}
 			else if (res_blobs_cmd == SELFUP_CMD_RESPONSE_OBJS3_DONE) {
 				NS_STATUS("mainup net objs done");
