@@ -26,6 +26,10 @@ extern int g_tcpasync_disable_timeout;
 typedef ::std::unique_ptr<int, void(*)(int *fd)> unique_ptr_fd;
 typedef ::std::shared_ptr<int>                   shared_ptr_fd;
 
+typedef ::std::unique_ptr<addrinfo, void(*)(addrinfo *p)> unique_ptr_addrinfo;
+
+struct tcpsocket_connect_tag_t {};
+
 class NsLogTlsServ : public NsLogTls
 {
 public:
@@ -48,9 +52,8 @@ class TCPSocket
 {
 public:
 
-	TCPSocket();
+	TCPSocket(const char *node, const char *service, tcpsocket_connect_tag_t);
 
-	void Connect(Address addr);
 	void Send(NetworkPacket *packet);
 	NetworkPacket Recv();
 
@@ -88,7 +91,7 @@ public:
 
 	typedef ::std::function<void(NetworkPacket *packet, Respond *respond)> function_framedispatch_t;
 
-	TCPThreaded(Address addr, size_t thread_num);
+	TCPThreaded(const char *node, const char *service, size_t thread_num);
 
 	void setFrameDispatch(const function_framedispatch_t &framedispatch);
 	void startBoth();
@@ -118,15 +121,18 @@ private:
 class TCPLogDump
 {
 public:
-	static void dump(Address addr, uint32_t magic, const char *data, size_t data_len);
+	static void dumpResolving(const char *node, const char *service, uint32_t magic, const char *data, size_t data_len);
+	static void dump(Address addr, int socktype, int protocol, uint32_t magic, const char * data, size_t data_len);
 };
 
+void delete_addrinfo(addrinfo *p);
+addrinfo * do_getaddrinfo(const char *node, const char *service, const addrinfo *hints);
+
 void tcpthreaded_socket_close_helper(int *fd);
-unique_ptr_fd tcpthreaded_socket_helper();
+unique_ptr_fd tcpthreaded_socket_connecting_helper(const char *node, const char *service);
 Address tcpthreaded_socket_peer_helper(int fd);
-unique_ptr_fd tcpthreaded_socket_listen_helper(Address addr);
+unique_ptr_fd tcpthreaded_socket_listen_helper(const char *node, const char *service);
 unique_ptr_fd tcpthreaded_socket_accept_helper(int fd);
-void tcpthreaded_socket_connect_helper(int fd, Address addr);
 NetworkPacket tcpthreaded_blocking_read_helper(int fd);
 void tcpthreaded_blocking_write_helper(int fd, NetworkPacket *packet, size_t afterpacket_extra_size);
 void tcpthreaded_blocking_sendfile_helper(int fd, int fdfile, size_t size);

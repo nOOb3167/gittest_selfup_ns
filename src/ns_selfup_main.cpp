@@ -31,7 +31,7 @@
 
 #define NS_STATUS(cstr) do { NS_LOG_SZ(cstr, strlen(cstr)); NS_GUI_STATUS(cstr); } while (0);
 
-#define NS_LOGDUMP(addr, magic) do { NS_LOG_LOCK(); TCPLogDump::dump((addr), (magic), g_log->getBuf().data(), g_log->getBuf().size()); } while (0);
+#define NS_LOGDUMP(node, service, magic) do { NS_LOG_LOCK(); TCPLogDump::dumpResolving((node), (service), (magic), g_log->getBuf().data(), g_log->getBuf().size()); } while (0);
 
 /* NOTE: attempting to exit with non-joined std::threads causes abort() */
 /* NOTE: main() must not leak exceptions due to reliance on stack unwinding (see RefKill) */
@@ -109,14 +109,12 @@ private:
 class SelfupWork
 {
 public:
-	SelfupWork(Address addr) :
-		m_sock(new TCPSocket()),
+	SelfupWork(const char *node, const char *service) :
+		m_sock(new TCPSocket(node, service, tcpsocket_connect_tag_t())),
 		m_respond(new SelfupRespondWork(m_sock)),
 		m_thread(),
 		m_thread_exc()
-	{
-		m_sock->Connect(addr);
-	}
+	{}
 
 	virtual ~SelfupWork() = default;
 
@@ -199,8 +197,8 @@ public:
 class SelfupWork1 : public SelfupWork
 {
 public:
-	SelfupWork1(Address addr, std::shared_ptr<SelfupConExt1> ext) :
-		SelfupWork(addr),
+	SelfupWork1(const char *node, const char *service, std::shared_ptr<SelfupConExt1> ext) :
+		SelfupWork(node, service),
 		m_ext(ext)
 	{}
 
@@ -310,8 +308,8 @@ public:
 class SelfupWork2 : public SelfupWork
 {
 public:
-	SelfupWork2(Address addr, std::shared_ptr<SelfupConExt2> ext) :
-		SelfupWork(addr),
+	SelfupWork2(const char *node, const char *service, std::shared_ptr<SelfupConExt2> ext) :
+		SelfupWork(node, service),
 		m_ext(ext)
 	{}
 
@@ -630,14 +628,14 @@ unique_ptr_gitrepository selfup_ensure_repository(const std::string &repopath, c
 	return unique_ptr_gitrepository(repo, deleteGitrepository);
 }
 
-void selfup_start_mainupdate_crank(Address addr)
+void selfup_start_mainupdate_crank(const char *node, const char *service)
 {
 	std::string repopath = ns_filesys::current_executable_relative_filename("clnt_repo/.git");
 	std::string refname = "refs/heads/mainup";
 	std::string checkoutpath = ns_filesys::current_executable_relative_filename("clnt_chkout");
 	selfup_ensure_repository(repopath, ".git");
 	std::shared_ptr<SelfupConExt2> ext(new SelfupConExt2(repopath, refname));
-	std::unique_ptr<SelfupWork2> work(new SelfupWork2(addr, ext));
+	std::unique_ptr<SelfupWork2> work(new SelfupWork2(node, service, ext));
 
 	NS_STATUS("mainup net start");
 
@@ -655,11 +653,11 @@ void selfup_start_mainupdate_crank(Address addr)
 	selfup_mainexec_probably_blocking(ns_filesys::path_append_abs_rel(checkoutpath, "bin/minetest.exe"));
 }
 
-bool selfup_start_crank(Address addr)
+bool selfup_start_crank(const char *node, const char *service)
 {
 	std::string cur_exe_filename = ns_filesys::current_executable_filename();
 	std::shared_ptr<SelfupConExt1> ext(new SelfupConExt1(cur_exe_filename, "refs/heads/selfup"));
-	std::unique_ptr<SelfupWork1> work(new SelfupWork1(addr, ext));
+	std::unique_ptr<SelfupWork1> work(new SelfupWork1(node, service, ext));
 
 	NS_STATUS("selfup net start");
 
@@ -703,12 +701,12 @@ bool selfup_start_crank(Address addr)
 	return true;
 }
 
-void toplevel(Address addr)
+void toplevel(const char *node, const char *service)
 {
 	NS_STATUS("startup");
 
-	if (! selfup_start_crank(addr))
-		selfup_start_mainupdate_crank(addr);
+	if (! selfup_start_crank(node, service))
+		selfup_start_mainupdate_crank(node, service);
 
 	NS_STATUS("shutdown");
 }
@@ -738,17 +736,18 @@ int main(int argc, char **argv)
 	g_tcpasync_disable_timeout = g_conf->getDec("tcpasync_disable_timeout");
 	g_selfup_selfupdate_skip_fileops = g_conf->getDec("selfupdate_skip_fileops");
 
-	Address addr(AF_INET, g_conf->getDec("serv_port"), g_conf->getHex("serv_conn_addr"), address_ipv4_tag_t());
+	std::string node = g_conf->get("serv_conn_addr");
+	std::string service = g_conf->get("serv_port");
 
-	ns_crash_handler_setup(addr);
+	ns_crash_handler_setup(node.c_str(), service.c_str());
 
-	NS_TOPLEVEL_CATCH_SELFUP(ret, toplevel, addr);
+	NS_TOPLEVEL_CATCH_SELFUP(ret, toplevel, node.c_str(), service.c_str());
 
 	g_gui_ctx->stopRequest();
 	g_gui_ctx->join();
 
 	if (!! ret)
-		NS_LOGDUMP(addr, 0x04030201);
+		NS_LOGDUMP(node.c_str(), service.c_str(), 0x04030201);
 
 	if (ret == 0)
 		return EXIT_SUCCESS;

@@ -93,8 +93,8 @@ public:
 class ServupWork2
 {
 public:
-	ServupWork2(Address addr, size_t thread_num, std::shared_ptr<ServupConExt2> ext) :
-		m_thrd(new TCPThreaded(addr, thread_num)),
+	ServupWork2(const char *node, const char *service, size_t thread_num, std::shared_ptr<ServupConExt2> ext) :
+		m_thrd(new TCPThreaded(node, service, thread_num)),
 		m_ext(ext)
 	{}
 
@@ -208,19 +208,19 @@ private:
 	std::shared_ptr<ServupConExt2> m_ext;
 };
 
-void servup_start_crank(Address addr)
+void servup_start_crank(const char *node, const char *service)
 {
 	std::string repopath = ns_filesys::current_executable_relative_filename("serv_repo/.git");
 	std::shared_ptr<ServupConExt2> ext(new ServupConExt2(repopath));
-	std::unique_ptr<ServupWork2> work(new ServupWork2(addr, g_servup_thread_num, ext));
+	std::unique_ptr<ServupWork2> work(new ServupWork2(node, service, g_servup_thread_num, ext));
 	work->run();
 }
 
-void toplevel(Address addr)
+void toplevel(const char *node, const char *service)
 {
 	NS_SOG_PF("startup");
 
-	servup_start_crank(addr);
+	servup_start_crank(node, service);
 
 	NS_SOG_PF("shutdown");
 }
@@ -238,9 +238,9 @@ int main(int argc, char **argv)
 	g_tcpasync_disable_timeout = g_conf->getDec("tcpasync_disable_timeout");
 	g_servup_thread_num = g_conf->getDec("servup_thread_num");
 
-	Address addr(AF_INET, g_conf->getDec("serv_port"), g_conf->getHex("serv_bind_addr"), address_ipv4_tag_t());
+	std::string service = g_conf->get("serv_port");
 
-	NS_TOPLEVEL_CATCH_SERV(ret, toplevel, addr);
+	NS_TOPLEVEL_CATCH_SERV(ret, toplevel, (const char *) NULL, service.c_str());
 
 	if (ret == 0)
 		return EXIT_SUCCESS;

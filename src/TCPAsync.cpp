@@ -22,6 +22,21 @@
 
 int g_tcpasync_disable_timeout = 0;
 
+void delete_addrinfo(addrinfo *p)
+{
+	if (p)
+		freeaddrinfo(p);
+}
+
+addrinfo * do_getaddrinfo(const char *node, const char *service, const addrinfo *hints)
+{
+	addrinfo *res = NULL;
+	int r = getaddrinfo(node, service, hints, &res);
+	if (r != 0)
+		throw std::runtime_error("getaddrinfo");
+	return res;
+}
+
 TimeoutExc::TimeoutExc(const char * msg) :
 	std::runtime_error(msg)
 {}
@@ -43,17 +58,9 @@ std::string & NsLogTlsServ::virtualGetIdent()
 	return m_thread_idx_s;
 }
 
-TCPSocket::TCPSocket() :
-	m_handle(tcpthreaded_socket_helper())
+TCPSocket::TCPSocket(const char *node, const char *service, tcpsocket_connect_tag_t) :
+	m_handle(tcpthreaded_socket_connecting_helper(node, service))
 {}
-
-void TCPSocket::Connect(Address addr)
-{
-	if (addr.getFamily() != AF_INET)
-		throw std::runtime_error("TCPSocket connect family");
-
-	tcpthreaded_socket_connect_helper(*m_handle, addr);
-}
 
 void TCPSocket::Send(NetworkPacket * packet)
 {
@@ -97,9 +104,9 @@ TCPThreaded::ThreadCtx::ThreadCtx(size_t thread_idx) :
 	m_thread_idx(thread_idx)
 {}
 
-TCPThreaded::TCPThreaded(Address addr, size_t thread_num) :
+TCPThreaded::TCPThreaded(const char *node, const char *service, size_t thread_num) :
 	m_framedispatch(),
-	m_listen(tcpthreaded_socket_listen_helper(addr)),
+	m_listen(tcpthreaded_socket_listen_helper(node, service)),
 	m_listen_thread_exc(),
 	m_listen_thread(),
 	m_thread_exc(),
@@ -167,7 +174,7 @@ void TCPThreaded::threadFuncListenLoop2()
 
 		Address peer = tcpthreaded_socket_peer_helper(*nsock);
 
-		NS_SOG_PF("accept [%#.8X:%.4hu]", peer.getAddr4(), peer.getPort());
+		NS_SOG_PF("accept [%s]", peer.getStr().c_str());
 
 		{
 			std::unique_lock<std::mutex> lock(m_queue_mutex);
@@ -204,7 +211,7 @@ void TCPThreaded::threadFunc2(const std::shared_ptr<ThreadCtx>& ctx)
 
 		Address peer = tcpthreaded_socket_peer_helper(*fd);
 
-		NS_SOG_PF("connect [%#.8X:%.4hu]", peer.getAddr4(), peer.getPort());
+		NS_SOG_PF("connect [%s]", peer.getStr().c_str());
 
 		try {
 			while (true) {
@@ -220,14 +227,36 @@ void TCPThreaded::threadFunc2(const std::shared_ptr<ThreadCtx>& ctx)
 	}
 }
 
-void TCPLogDump::dump(Address addr, uint32_t magic, const char * data, size_t data_len)
+void TCPLogDump::dumpResolving(const char *node, const char *service, uint32_t magic, const char *data, size_t data_len)
+{
+	addrinfo hint = {};
+	hint.ai_flags = AI_V4MAPPED | AI_ADDRCONFIG;
+	hint.ai_family = AF_UNSPEC;
+	hint.ai_socktype = SOCK_STREAM;
+	hint.ai_protocol = 0;
+
+	unique_ptr_addrinfo res(do_getaddrinfo(node, service, &hint), delete_addrinfo);
+
+	for (addrinfo *r = res.get(); r != NULL; r = r->ai_next) {
+		struct sockaddr_storage storage = {};
+		memcpy(&storage, r->ai_addr, r->ai_addrlen);
+		dump(Address(&storage, address_storage_tag_t()), r->ai_socktype, r->ai_protocol, magic, data, data_len);
+	}
+}
+
+void TCPLogDump::dump(Address addr, int socktype, int protocol, uint32_t magic, const char * data, size_t data_len)
 {
 	NetworkPacket packet(SELFUP_CMD_LOGDUMP, networkpacket_cmd_tag_t());
 	packet << magic;
 	packet << (uint32_t)data_len;
 	packet.outSizedStr(data, data_len);
-	unique_ptr_fd sock = tcpthreaded_socket_helper();
-	tcpthreaded_socket_connect_helper(*sock, addr);
+
+	unique_ptr_fd sock(new int(socket(addr.getFamily(), socktype, protocol)), TCPSocket::deleteFd);
+	if (*sock < 0)
+		throw std::runtime_error("socket");
+	if (connect(*sock, (struct sockaddr *) addr.getStorage(), addr.getStorageLen()) < 0)
+		throw std::runtime_error("connect");
+
 	tcpthreaded_blocking_write_helper(*sock, &packet, 0);
 }
 
@@ -239,8 +268,8 @@ void tcpthreaded_aux_recv(int fd, char *buf, int len)
 	while (off < len) {
 		int rcvt = recv(fd, buf + off, len - off, 0);
 		/* https://stackoverflow.com/a/36913250
-		     wtf does recv actually _return_ WSAETIMEOUT? */
-		/* SO_RCVTIMEO can cause WSAGetLastError WSAETIMEOUT */
+		     wtf does recv actually _return_ WSAETIMEDOUT? */
+		/* SO_RCVTIMEO can cause WSAGetLastError WSAETIMEDOUT */
 		/* https://msdn.microsoft.com/en-us/library/windows/desktop/ms740476(v=vs.85).aspx
 		     but indeterminate state on WSAETIMEDOUT - therefore no special handling */
 		if (rcvt == 0 || rcvt < 0)
@@ -257,45 +286,65 @@ void tcpthreaded_socket_close_helper(int *fd)
 	}
 }
 
-unique_ptr_fd tcpthreaded_socket_helper()
+unique_ptr_fd tcpthreaded_socket_connecting_helper(const char *node, const char *service)
 {
-	unique_ptr_fd sock(new int(socket(AF_INET, SOCK_STREAM, IPPROTO_TCP)), TCPSocket::deleteFd);
-	if (*sock < 0)
-		throw std::runtime_error("socket");
-	return sock;
+	addrinfo hint = {};
+	hint.ai_flags = AI_V4MAPPED | AI_ADDRCONFIG;
+	hint.ai_family = AF_UNSPEC;
+	hint.ai_socktype = SOCK_STREAM;
+	hint.ai_protocol = 0;
+
+	unique_ptr_addrinfo res(do_getaddrinfo(node, service, &hint), delete_addrinfo);
+
+	for (addrinfo *r = res.get(); r != NULL; r = r->ai_next) {
+		unique_ptr_fd sock(new int(socket(r->ai_family, r->ai_socktype, r->ai_protocol)), TCPSocket::deleteFd);
+		if (*sock < 0)
+			continue;
+		if (connect(*sock, r->ai_addr, r->ai_addrlen) < 0)
+			continue;
+		return sock;
+	}
+
+	throw std::runtime_error("socket connecting helper");
 }
 
 Address tcpthreaded_socket_peer_helper(int fd)
 {
-	struct sockaddr_in sockaddr = {};
+	struct sockaddr_storage sockaddr = {};
 	int socklen = sizeof sockaddr;
 	if (getpeername(fd, (struct sockaddr *) &sockaddr, &socklen) < 0)
 		throw std::runtime_error("getpeername");
-	if (sockaddr.sin_family != AF_INET)
-		throw std::runtime_error("getpeername family");
-	Address addr(sockaddr.sin_family, ntohs(sockaddr.sin_port), ntohl(sockaddr.sin_addr.s_addr), address_ipv4_tag_t());
+	Address addr(&sockaddr, address_storage_tag_t());
 	return addr;
 }
 
-unique_ptr_fd tcpthreaded_socket_listen_helper(Address addr)
+unique_ptr_fd tcpthreaded_socket_listen_helper(const char *node, const char *service)
 {
-	unique_ptr_fd sock(new int(socket(AF_INET, SOCK_STREAM, IPPROTO_TCP)), TCPSocket::deleteFd);
-	if (*sock < 0)
-		throw std::runtime_error("socket");
-	struct sockaddr_in sockaddr = {};
-	sockaddr.sin_family = addr.getFamily();
-	sockaddr.sin_port = htons(addr.getPort());
-	sockaddr.sin_addr.s_addr = htonl(addr.getAddr4());
-	if (bind(*sock, (struct sockaddr *) &sockaddr, sizeof sockaddr) < 0)
-		throw std::runtime_error("bind");
-	if (listen(*sock, 5) < 0)
-		throw std::runtime_error("listen");
-	return sock;
+	addrinfo hint = {};
+	hint.ai_flags = AI_V4MAPPED | AI_ADDRCONFIG | AI_PASSIVE;
+	hint.ai_family = AF_UNSPEC;
+	hint.ai_socktype = SOCK_STREAM;
+	hint.ai_protocol = 0;
+
+	unique_ptr_addrinfo res(do_getaddrinfo(node, service, &hint), delete_addrinfo);
+
+	for (addrinfo *r = res.get(); r != NULL; r = r->ai_next) {
+		unique_ptr_fd sock(new int(socket(r->ai_family, r->ai_socktype, r->ai_protocol)), TCPSocket::deleteFd);
+		if (*sock < 0)
+			continue;
+		if (bind(*sock, r->ai_addr, r->ai_addrlen) < 0)
+			continue;
+		if (listen(*sock, 5) < 0)
+			continue;
+		return sock;
+	}
+
+	throw std::runtime_error("socket listen helper");
 }
 
 unique_ptr_fd tcpthreaded_socket_accept_helper(int fd)
 {
-	struct sockaddr_in sockaddr = {};
+	struct sockaddr_storage sockaddr = {};
 	int socklen = sizeof sockaddr;
 	unique_ptr_fd nsock(new int(accept(fd, (struct sockaddr *) &sockaddr, &socklen)), TCPSocket::deleteFd);
 	if (*nsock < 0)
@@ -306,18 +355,6 @@ unique_ptr_fd tcpthreaded_socket_accept_helper(int fd)
 			throw std::runtime_error("setsockopt");
 	}
 	return nsock;
-}
-
-void tcpthreaded_socket_connect_helper(int fd, Address addr)
-{
-	struct sockaddr_in sockaddr = {};
-
-	sockaddr.sin_family = addr.getFamily();
-	sockaddr.sin_port = htons(addr.getPort());
-	sockaddr.sin_addr.s_addr = htonl(addr.getAddr4());
-
-	if (connect(fd, (struct sockaddr *) &sockaddr, sizeof sockaddr) < 0)
-		throw std::runtime_error("connect");
 }
 
 NetworkPacket tcpthreaded_blocking_read_helper(int fd)
@@ -448,46 +485,70 @@ void tcpthreaded_socket_close_helper(int *fd)
 	}
 }
 
-unique_ptr_fd tcpthreaded_socket_helper()
+unique_ptr_fd tcpthreaded_socket_connecting_helper(const char *node, const char *service)
 {
-	unique_ptr_fd sock(new int(socket(AF_INET, SOCK_STREAM, IPPROTO_TCP)), TCPSocket::deleteFd);
-	if (*sock < 0)
-		throw std::runtime_error("socket");
-	return sock;
+	int ret = 0;
+
+	addrinfo hint = {};
+	hint.ai_flags = AI_V4MAPPED | AI_ADDRCONFIG;
+	hint.ai_family = AF_UNSPEC;
+	hint.ai_socktype = SOCK_STREAM;
+	hint.ai_protocol = 0;
+
+	unique_ptr_addrinfo res(do_getaddrinfo(node, service, &hint), delete_addrinfo);
+
+	for (addrinfo *r = res.get(); r != NULL; r = r->ai_next) {
+		unique_ptr_fd sock(new int(socket(r->ai_family, r->ai_socktype, r->ai_protocol)), TCPSocket::deleteFd);
+		if (*sock < 0)
+			continue;
+		while ((ret = connect(*sock, r->ai_addr, r->ai_addrlen) < 0 && errno == EINTR)
+		{}
+		if (ret < 0)
+			continue;
+		return sock;
+	}
+
+	throw std::runtime_error("socket");
 }
 
 Address tcpthreaded_socket_peer_helper(int fd)
 {
-	struct sockaddr_in sockaddr = {};
-	socklen_t socklen = sizeof sockaddr;
+	struct sockaddr_storage sockaddr = {};
+	int socklen = sizeof sockaddr;
 	if (getpeername(fd, (struct sockaddr *) &sockaddr, &socklen) < 0)
 		throw std::runtime_error("getpeername");
-	if (sockaddr.sin_family != AF_INET)
-		throw std::runtime_error("getpeername family");
-	Address addr(sockaddr.sin_family, ntohs(sockaddr.sin_port), ntohl(sockaddr.sin_addr.s_addr), address_ipv4_tag_t());
+	Address addr(&sockaddr, address_storage_tag_t());
 	return addr;
 }
 
-unique_ptr_fd tcpthreaded_socket_listen_helper(Address addr)
+unique_ptr_fd tcpthreaded_socket_listen_helper(const char *node, const char *service)
 {
-	unique_ptr_fd sock(new int(socket(AF_INET, SOCK_STREAM, IPPROTO_TCP)), TCPSocket::deleteFd);
-	if (*sock < 0)
-		throw std::runtime_error("socket");
-	struct sockaddr_in sockaddr = {};
-	sockaddr.sin_family = addr.getFamily();
-	sockaddr.sin_port = htons(addr.getPort());
-	sockaddr.sin_addr.s_addr = htonl(addr.getAddr4());
-	if (bind(*sock, (struct sockaddr *) &sockaddr, sizeof sockaddr) < 0)
-		throw std::runtime_error("bind");
-	if (listen(*sock, 5) < 0)
-		throw std::runtime_error("listen");
-	return sock;
+	addrinfo hint = {};
+	hint.ai_flags = AI_V4MAPPED | AI_ADDRCONFIG | AI_PASSIVE;
+	hint.ai_family = AF_UNSPEC;
+	hint.ai_socktype = SOCK_STREAM;
+	hint.ai_protocol = 0;
+
+	unique_ptr_addrinfo res(do_getaddrinfo(node, service, &hint), delete_addrinfo);
+
+	for (addrinfo *r = res.get(); r != NULL; r = r->ai_next) {
+		unique_ptr_fd sock(new int(socket(r->ai_family, r->ai_socktype, r->ai_protocol)), TCPSocket::deleteFd);
+		if (*sock < 0)
+			continue;
+		if (bind(*sock, r->ai_addr, r->ai_addrlen) < 0)
+			continue;
+		if (listen(*sock, 5) < 0)
+			continue;
+		return sock;
+	}
+
+	throw std::runtime_error("socket listen helper");
 }
 
 unique_ptr_fd tcpthreaded_socket_accept_helper(int fd)
 {
 	int ret = 0;
-	struct sockaddr_in sockaddr = {};
+	struct sockaddr_storage sockaddr = {};
 	socklen_t socklen = sizeof sockaddr; // FIXME: socklen_t for NIX
 	while ((ret = accept(fd, (struct sockaddr *) &sockaddr, &socklen)) < 0)
 	{
@@ -504,21 +565,6 @@ unique_ptr_fd tcpthreaded_socket_accept_helper(int fd)
 			throw std::runtime_error("setsockopt");
 	}
 	return nsock;
-}
-
-void tcpthreaded_socket_connect_helper(int fd, Address addr)
-{
-	int ret = 0;
-	struct sockaddr_in sockaddr = {};
-	sockaddr.sin_family = addr.getFamily();
-	sockaddr.sin_port = htons(addr.getPort());
-	sockaddr.sin_addr.s_addr = htonl(addr.getAddr4());
-	while ((ret = connect(fd, (struct sockaddr *) &sockaddr, sizeof sockaddr)) < 0)
-	{
-		if (errno == EINTR)
-			continue;
-		throw std::runtime_error("connect");
-	}
 }
 
 NetworkPacket tcpthreaded_blocking_read_helper(int fd)
