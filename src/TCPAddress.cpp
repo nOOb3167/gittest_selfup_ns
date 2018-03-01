@@ -67,8 +67,10 @@ std::string Address::getStr() const
 	{
 	case AF_INET:
 		res = inet_ntop(AF_INET, &((struct sockaddr_in *) &m_storage)->sin_addr.s_addr, b4, sizeof b4);
+		break;
 	case AF_INET6:
 		res = inet_ntop(AF_INET, &((struct sockaddr_in6 *) &m_storage)->sin6_addr.s6_addr, b6, sizeof b6);
+		break;
 	default:
 		assert(0);
 	}
