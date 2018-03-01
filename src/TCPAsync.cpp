@@ -501,7 +501,7 @@ unique_ptr_fd tcpthreaded_socket_connecting_helper(const char *node, const char 
 		unique_ptr_fd sock(new int(socket(r->ai_family, r->ai_socktype, r->ai_protocol)), TCPSocket::deleteFd);
 		if (*sock < 0)
 			continue;
-		while ((ret = connect(*sock, r->ai_addr, r->ai_addrlen) < 0 && errno == EINTR)
+		while ((ret = connect(*sock, r->ai_addr, r->ai_addrlen)) < 0 && errno == EINTR)
 		{}
 		if (ret < 0)
 			continue;
@@ -514,7 +514,7 @@ unique_ptr_fd tcpthreaded_socket_connecting_helper(const char *node, const char 
 Address tcpthreaded_socket_peer_helper(int fd)
 {
 	struct sockaddr_storage sockaddr = {};
-	int socklen = sizeof sockaddr;
+	socklen_t socklen = sizeof sockaddr;
 	if (getpeername(fd, (struct sockaddr *) &sockaddr, &socklen) < 0)
 		throw std::runtime_error("getpeername");
 	Address addr(&sockaddr, address_storage_tag_t());

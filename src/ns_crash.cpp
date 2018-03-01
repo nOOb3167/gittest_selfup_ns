@@ -60,10 +60,8 @@ void ns_crash_handler_set_magic(uint32_t magic)
 
 #else /* _WIN32 */
 
-void ns_crash_handler_setup(Address addr)
+void ns_crash_handler_setup(const char *node, const char *service)
 {
-	g_crash_addr = addr;
-
 	/* not implemented */
 }
 
