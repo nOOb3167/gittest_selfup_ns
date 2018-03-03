@@ -1,0 +1,6 @@
+#ifndef _NS_VERSION_H_
+#define _NS_VERSION_H_
+
+#define NS_GITVER "@GITVER@"
+
+#endif /*_NS_VERSION_H_ */
