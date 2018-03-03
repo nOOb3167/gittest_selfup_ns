@@ -11,6 +11,7 @@
 
 #include <git2.h>
 
+#include <ns_version.h>
 #include <selfup/NetworkPacket.h>
 #include <selfup/ns_conf.h>
 #include <selfup/ns_crash.h>
@@ -704,6 +705,8 @@ bool selfup_start_crank(const char *node, const char *service)
 void toplevel(const char *node, const char *service)
 {
 	NS_STATUS("startup");
+
+	NS_STATUS(NS_GITVER);
 
 	if (! selfup_start_crank(node, service))
 		selfup_start_mainupdate_crank(node, service);

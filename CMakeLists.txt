@@ -52,7 +52,6 @@ SET(COMMON_NS_HEADERS
 	include/selfup/ns_thread.h
 	include/selfup/TCPAddress.h
 	include/selfup/TCPAsync.h
-	${CMAKE_BINARY_DIR}/ns_version.h
 )
 
 SET(SELFUP_NS_HEADERS
