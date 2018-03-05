@@ -1,7 +1,10 @@
+#include <cassert>
 #include <cstdio>
+#include <cstdlib>
 #include <fstream>
 #include <sstream>
 #include <string>
+#include <vector>
 
 #ifdef _WIN32
 #include <windows.h>
@@ -21,6 +24,8 @@
 
 #include <selfup/ns_filesys.h>
 #include <selfup/ns_helpers.h>
+
+#define NS_PROCESS_WAIT_MSEC 10000
 
 namespace ns_filesys
 {
@@ -204,6 +209,58 @@ void directory_create_unless_exist(std::string dirname)
 	}
 }
 
+void process_start(
+	const std::string &filename,
+	const std::vector<std::string> &args,
+	long long *retcode_blocking_opt)
+{
+	std::stringstream ss;
+	
+	ss << "\"" << filename << "\"";
+
+	for (size_t i = 0; i < args.size(); i++)
+		ss << " " << "\"" << args[i] << "\"";
+
+	std::string argv = ss.str();
+	argv.append(1, '\0');
+
+	PROCESS_INFORMATION pi = {};
+	STARTUPINFO si = {};
+	si.cb = sizeof si;
+
+	if (! CreateProcess(
+		filename.c_str(), (LPSTR) argv.data(),
+		NULL, NULL,
+		TRUE, 0,
+		NULL, NULL,
+		&si, &pi))
+	{
+		throw FilesysExc("process create");
+	}
+
+	if (retcode_blocking_opt) {
+		try {
+			DWORD exitcode = 0;
+			if (WAIT_OBJECT_0 != WaitForSingleObject(pi.hProcess, NS_PROCESS_WAIT_MSEC))
+				throw FilesysExc("process wait");
+			if (! GetExitCodeProcess(pi.hProcess, &exitcode))
+				throw FilesysExc("create exit code");;
+			*retcode_blocking_opt = exitcode;
+		} catch (const std::exception &e) {
+			if (pi.hThread && ! CloseHandle(pi.hThread))
+				assert(0);
+			if (pi.hProcess && ! CloseHandle(pi.hProcess))
+				assert(0);
+			throw;
+		}
+	}
+
+	if (pi.hThread && ! CloseHandle(pi.hThread))
+		assert(0);
+	if (pi.hProcess && ! CloseHandle(pi.hProcess))
+		assert(0);
+}
+
 #else /* _WIN32 */
 
 static bool gs_nix_path_is_absolute(const std::string &path)
@@ -347,6 +404,43 @@ void directory_create_unless_exist(std::string dirname)
 		if (errno == EEXIST)
 			return;
 		throw FilesysExc("mkdir");
+	}
+}
+
+void process_start(
+	const std::string &filename,
+	const std::vector<std::string> &args,
+	long long *retcode_blocking_opt)
+{
+	std::vector<const char *> argv;
+
+	argv.push_back(filename.c_str());
+
+	for (size_t i = 0; i < args.size(); i++)
+		argv.push_back(args[i].c_str());
+
+	/* argv must be terminated by NULL, see execv(2) */
+	argv.push_back(NULL);
+
+	pid_t pidchild = -1;
+
+	if ((pidchild = fork()) == -1)
+		throw FilesysExc("fork");
+	if (pidchild == 0) {
+		/* consider calling _Exit (C99) on failure */
+		if (!! execv(filename, (char * const *) argv.data()))
+			exit(EXIT_FAILURE);
+	}
+	else {
+		if (retcode_blocking_opt) {
+			int statuschild = 0;
+			pid_t pidwait = -1;
+			if ((pidwait = waitpid(pidchild, &statuschild, 0)) == -1)
+				throw FilesysExc("waitpid");
+			if (! WIFEXITED(statuschild))
+				throw FilesysExc("WIFEXITED");
+			*retcode_blocking_opt = WEXITSTATUS(statuschild);
+		}
 	}
 }
 

@@ -4,6 +4,7 @@
 #include <cstring>
 #include <stdexcept>
 #include <string>
+#include <vector>
 
 class FilesysExc : std::runtime_error
 {
@@ -44,6 +45,11 @@ void rename_file_file(
 	std::string dst_filename);
 
 void directory_create_unless_exist(std::string dirname);
+
+void process_start(
+	const std::string &filename,
+	const std::vector<std::string> &args,
+	long long *retcode_blocking_opt);
 
 }
 
