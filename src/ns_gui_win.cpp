@@ -101,10 +101,10 @@ unique_ptr_hbitmap win_bitmap_from_rgb(
 
 	for (int y = 0; y < height; y++)
 		for (int x = 0; x < width; x++) {
-			tmpbuf[width * 4 * y + 4 * x + 0] = img_data_buf[width * 3 * y + 3 * x + 0];
-			tmpbuf[width * 4 * y + 4 * x + 1] = img_data_buf[width * 3 * y + 3 * x + 1];
-			tmpbuf[width * 4 * y + 4 * x + 2] = img_data_buf[width * 3 * y + 3 * x + 2];
-			tmpbuf[width * 4 * y + 4 * x + 3] = 0;
+			tmpbuf[width * 4 * (height-1-y) + 4 * x + 0] = img_data_buf[width * 3 * y + 3 * x + 2];
+			tmpbuf[width * 4 * (height-1-y) + 4 * x + 1] = img_data_buf[width * 3 * y + 3 * x + 1];
+			tmpbuf[width * 4 * (height-1-y) + 4 * x + 2] = img_data_buf[width * 3 * y + 3 * x + 0];
+			tmpbuf[width * 4 * (height-1-y) + 4 * x + 3] = 0;
 		}
 
 	// FIXME: using hdc instead of hdc2 fixes most fields of GetObject
@@ -373,7 +373,7 @@ void win_threadfunc()
 
 			std::unique_lock<std::mutex> lock(g_gui_ctx->getMutex());
 
-			win_drawimage_mask_b(hdc->hdc, GS_GUI_COLOR_MASK_RGB, &img_logo, 0, 0, img_logo.m_width, img_logo.m_height, 164, 64);
+			win_drawimage_mask_b(hdc->hdc, GS_GUI_COLOR_MASK_RGB, &img_logo, 0, 0, img_logo.m_width, img_logo.m_height, 164, 60);
 
 			switch (g_gui_ctx->getProgress().m_mode)
 			{
