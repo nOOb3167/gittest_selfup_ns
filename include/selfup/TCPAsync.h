@@ -30,7 +30,7 @@ typedef ::std::unique_ptr<addrinfo, void(*)(addrinfo *p)> unique_ptr_addrinfo;
 
 struct tcpsocket_connect_tag_t {};
 
-class NsLogTlsServ : public NsLogTls
+class NsLogTlsServ : public ns_log::NsLogTls
 {
 public:
 	NsLogTlsServ(const std::string &thread_idx_s);

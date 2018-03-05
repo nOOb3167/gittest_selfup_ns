@@ -730,8 +730,7 @@ int main(int argc, char **argv)
 		throw std::runtime_error("libgit2 init");
 
 	ns_conf::Conf::initGlobal();
-	NsLog::initGlobal();
-
+	ns_log::NsLog::initGlobal();
 	ns_gui::GuiCtx::initGlobal();
 	g_gui_ctx->start();
 

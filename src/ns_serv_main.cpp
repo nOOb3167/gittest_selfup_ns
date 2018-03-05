@@ -232,7 +232,7 @@ int main(int argc, char **argv)
 	tcpthreaded_startup_helper();
 
 	ns_conf::Conf::initGlobal();
-	NsLog::initGlobal();
+	ns_log::NsLog::initGlobal();
 
 	g_crash_mbox = g_conf->getDec("crash_mbox");
 	g_tcpasync_disable_timeout = g_conf->getDec("tcpasync_disable_timeout");

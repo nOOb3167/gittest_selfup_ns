@@ -15,8 +15,8 @@
 #define NS_SOG_DUMP(msg, msg_len) do { NS_LOG_LOCK(); g_log->srvLogDump((msg), (msg_len)); } while (0)
 #define NS_SOG_PF(...)            do { NS_LOG_LOCK(); g_log->srvLogPf(__FILE__, __LINE__, __VA_ARGS__); } while(0)
 
-class NsLog;
-extern std::unique_ptr<NsLog> g_log;
+namespace ns_log
+{
 
 class NsLogTls
 {
@@ -55,5 +55,9 @@ private:
 
 	ns_systemd_fd m_fd;
 };
+
+} /* namespace ns_log */
+
+extern std::unique_ptr<ns_log::NsLog> g_log;
 
 #endif /* _NS_LOG_H_ */

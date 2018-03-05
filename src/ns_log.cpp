@@ -6,9 +6,12 @@
 #include <selfup/ns_log.h>
 #include <selfup/ns_systemd.h>
 
-NS_THREAD_LOCAL_DESIGNATOR NsLogTls * g_log_tls = NULL;
+NS_THREAD_LOCAL_DESIGNATOR ns_log::NsLogTls * g_log_tls = NULL;
 
-std::unique_ptr<NsLog> g_log;
+std::unique_ptr<ns_log::NsLog> g_log;
+
+namespace ns_log
+{
 
 NsLog::NsLog() :
 	m_mutex(),
@@ -84,3 +87,5 @@ void NsLog::threadInitTls(NsLogTls * log_tls)
 		throw std::runtime_error("log_tls global");
 	g_log_tls = log_tls;
 }
+
+} /* namespace ns_log */
