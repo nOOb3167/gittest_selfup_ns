@@ -394,7 +394,7 @@ void win_threadfunc()
 					hdc->hdc,
 					&img_pb_empty,
 					&img_pb_blip,
-					0, 96,
+					0, 32,
 					g_gui_ctx->getProgress().m_blip_cnt);
 			}
 			break;
