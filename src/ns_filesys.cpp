@@ -20,6 +20,7 @@
 #include <unistd.h>
 #include <sys/stat.h>
 #include <sys/types.h>
+#include <sys/wait.h>
 #endif
 
 #include <selfup/ns_filesys.h>
@@ -428,7 +429,7 @@ void process_start(
 		throw FilesysExc("fork");
 	if (pidchild == 0) {
 		/* consider calling _Exit (C99) on failure */
-		if (!! execv(filename, (char * const *) argv.data()))
+		if (!! execv(filename.c_str(), (char * const *) argv.data()))
 			exit(EXIT_FAILURE);
 	}
 	else {
