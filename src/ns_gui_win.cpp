@@ -17,7 +17,8 @@
 #include <imgpbfull_384_32_.h>
 #include <imglogo_100_100_.h>
 
-#define GS_GUI_WIN_MAGIC_MSGNUM (WM_USER + 0x5423)
+#define GS_GUI_WIN_MAGIC_MSGNUM_QUIT (WM_USER + 0x5423)
+#define GS_GUI_WIN_MAGIC_MSGNUM_REFRESH (WM_USER + 0x5424)
 
 #define GS_GUI_WIN_FRAMERATE 30
 
@@ -406,26 +407,21 @@ void win_threadfunc()
 	if (! UpdateWindow(hwnd))
 		throw std::runtime_error("win update window");
 
-	while (true) {
-		auto timepoint_start = std::chrono::system_clock::now();
+	while ((ret = GetMessage(&msg, NULL, 0, 0)) != 0)
+	{
+		if (ret == -1)
+			throw std::runtime_error("win getmessage");
 
-		while (PeekMessage(&msg, NULL, 0, 0, PM_REMOVE))
-		{
-			if (msg.message == WM_QUIT)
-				goto label_done;
-			if (msg.message == GS_GUI_WIN_MAGIC_MSGNUM)
-				goto label_done;
+		if (msg.message == WM_QUIT)
+			break;
+		if (msg.message == GS_GUI_WIN_MAGIC_MSGNUM_QUIT)
+			break;
+		if (msg.message == GS_GUI_WIN_MAGIC_MSGNUM_REFRESH)
+			InvalidateRect(hwnd, NULL, false);
 
-			TranslateMessage(&msg);
-			DispatchMessage(&msg);
-		}
-
-		InvalidateRect(hwnd, NULL, false);
-
-		std::this_thread::sleep_until(timepoint_start + std::chrono::milliseconds(frame_duration_ms));
+		TranslateMessage(&msg);
+		DispatchMessage(&msg);
 	}
-label_done:
-	return;
 }
 
 class GuiCtxPlatWin : public GuiCtxPlat
@@ -451,6 +447,15 @@ public:
 	}
 
 	void virtualGuiStopRequest() override {
+		sendMessage(GS_GUI_WIN_MAGIC_MSGNUM_QUIT);
+	}
+
+	void virtualGuiRefreshRequest() override {
+		sendMessage(GS_GUI_WIN_MAGIC_MSGNUM_REFRESH);
+	}
+
+protected:
+	void sendMessage(UINT msgnum) {
 		/* https://msdn.microsoft.com/en-us/library/jj870808(v=vs.120).aspx
 		     native_handle_type is defined as a Win32 HANDLE that's cast as void */
 		std::thread &thread = m_ctx->getThread();
@@ -463,7 +468,7 @@ public:
 		     see the Remarks section of linked page for synchronization protocol. */
 		if (WaitForSingleObject(m_event0, INFINITE) != WAIT_OBJECT_0)
 			throw std::runtime_error("wait for single object");
-		if (! PostThreadMessage(idthread, GS_GUI_WIN_MAGIC_MSGNUM, 0, 0))
+		if (! PostThreadMessage(idthread, msgnum, 0, 0))
 			throw std::runtime_error("post thread message");
 	}
 
