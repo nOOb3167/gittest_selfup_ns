@@ -11,6 +11,7 @@
 #include <wingdi.h>
 
 #include <selfup/ns_gui.h>
+#include <selfup/ns_log.h>
 #include <imgpbblip_96_32_.h>
 #include <imgpbempty_384_32_.h>
 #include <imgpbfull_384_32_.h>
@@ -21,6 +22,8 @@
 #define GS_GUI_WIN_FRAMERATE 30
 
 #define GS_GUI_WIN_READIMAGE_B(hdc, lump) win_readimage_b(hdc, std::string(# lump), std::string((char *)(lump), sizeof (lump)))
+
+#define NS_GUI_LOG_ERR(cstr) do { NS_LOG_SZ(cstr, strlen(cstr)); } while (0)
 
 namespace ns_gui
 {
@@ -80,6 +83,11 @@ public:
 	int m_height;
 	unique_ptr_hbitmap m_hbitmap;
 };
+
+AuxImgB g_img_pb_empty;
+AuxImgB g_img_pb_full;
+AuxImgB g_img_pb_blip;
+AuxImgB g_img_logo;
 
 const char GsGuiWinClassName[] = "GsGuiWinClass";
 const char GsGuiWinWindowName[] = "Selfupdate";
@@ -263,13 +271,62 @@ void win_draw_progress_status(
 		throw std::runtime_error("win text out");
 }
 
+void win_draw_redraw_window(HWND hwnd, HDC hdc)
+{
+	win_clear_window(hwnd, hdc);
+
+	std::unique_lock<std::mutex> lock(g_gui_ctx->getMutex());
+
+	win_drawimage_mask_b(hdc, GS_GUI_COLOR_MASK_RGB, &g_img_logo, 0, 0, g_img_logo.m_width, g_img_logo.m_height, 164, 60);
+
+	switch (g_gui_ctx->getProgress().m_mode)
+	{
+	case 0:
+	{
+		win_draw_progress_ratio(
+			hdc,
+			&g_img_pb_empty,
+			&g_img_pb_full,
+			0, 32,
+			g_gui_ctx->getProgress().m_ratio_a, g_gui_ctx->getProgress().m_ratio_b);
+	}
+	break;
+
+	case 1:
+	{
+		win_draw_progress_blip(
+			hdc,
+			&g_img_pb_empty,
+			&g_img_pb_blip,
+			0, 32,
+			g_gui_ctx->getProgress().m_blip_cnt);
+	}
+	break;
+
+	default:
+		assert(0);
+	}
+
+	win_draw_progress_status(hdc, 4, 64, g_gui_ctx->getProgress().m_status);
+}
+
 LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam)
 {
+	/* beware of throwing exceptions through foreign stack (eg out of WndProc) */
+
 	switch (msg)
 	{
 	case WM_CREATE:
 	{
-		/*dummy*/
+		try {
+			unique_ptr_hdc hdc_startup(new DeleteHdcData(hwnd, GetDC(hwnd)), deleteHdc);
+			g_img_pb_empty = GS_GUI_WIN_READIMAGE_B(hdc_startup->hdc, imgpbempty_384_32_);
+			g_img_pb_full = GS_GUI_WIN_READIMAGE_B(hdc_startup->hdc, imgpbfull_384_32_);
+			g_img_pb_blip = GS_GUI_WIN_READIMAGE_B(hdc_startup->hdc, imgpbblip_96_32_);
+			g_img_logo = GS_GUI_WIN_READIMAGE_B(hdc_startup->hdc, imglogo_100_100_);
+		} catch (const std::exception &e) {
+			NS_GUI_LOG_ERR("WM_CREATE");
+		}
 	}
 	break;
 
@@ -279,8 +336,12 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam)
 		/* BeingPaint HDC 'released' by EndPaint */
 		PAINTSTRUCT ps = {};	
 		HDC hdc = BeginPaint(hwnd, &ps);
-		/* beware of throwing exceptions through foreign stack (eg out of WndProc) */
 		assert(hdc);
+		try {
+			win_draw_redraw_window(hwnd, hdc);
+		} catch (const std::exception &e) {
+			NS_GUI_LOG_ERR("WM_PAINT");
+		}
 		EndPaint(hwnd, &ps);
 	}
 	break;
@@ -345,13 +406,6 @@ void win_threadfunc()
 	if (! UpdateWindow(hwnd))
 		throw std::runtime_error("win update window");
 
-	unique_ptr_hdc hdc_startup(new DeleteHdcData(hwnd, GetDC(hwnd)), deleteHdc);
-	AuxImgB img_pb_empty = GS_GUI_WIN_READIMAGE_B(hdc_startup->hdc, imgpbempty_384_32_);
-	AuxImgB img_pb_full  = GS_GUI_WIN_READIMAGE_B(hdc_startup->hdc, imgpbfull_384_32_);
-	AuxImgB img_pb_blip  = GS_GUI_WIN_READIMAGE_B(hdc_startup->hdc, imgpbblip_96_32_);
-	AuxImgB img_logo     = GS_GUI_WIN_READIMAGE_B(hdc_startup->hdc, imglogo_100_100_);
-	hdc_startup.reset();
-
 	while (true) {
 		auto timepoint_start = std::chrono::system_clock::now();
 
@@ -366,45 +420,7 @@ void win_threadfunc()
 			DispatchMessage(&msg);
 		}
 
-		{
-			unique_ptr_hdc hdc(new DeleteHdcData(hwnd, GetDC(hwnd)), deleteHdc);
-
-			win_clear_window(hdc->hwnd, hdc->hdc);
-
-			std::unique_lock<std::mutex> lock(g_gui_ctx->getMutex());
-
-			win_drawimage_mask_b(hdc->hdc, GS_GUI_COLOR_MASK_RGB, &img_logo, 0, 0, img_logo.m_width, img_logo.m_height, 164, 60);
-
-			switch (g_gui_ctx->getProgress().m_mode)
-			{
-			case 0:
-			{
-				win_draw_progress_ratio(
-					hdc->hdc,
-					&img_pb_empty,
-					&img_pb_full,
-					0, 32,
-					g_gui_ctx->getProgress().m_ratio_a, g_gui_ctx->getProgress().m_ratio_b);
-			}
-			break;
-
-			case 1:
-			{
-				win_draw_progress_blip(
-					hdc->hdc,
-					&img_pb_empty,
-					&img_pb_blip,
-					0, 32,
-					g_gui_ctx->getProgress().m_blip_cnt);
-			}
-			break;
-
-			default:
-				assert(0);
-			}
-
-			win_draw_progress_status(hdc->hdc, 4, 64, g_gui_ctx->getProgress().m_status);
-		}
+		InvalidateRect(hwnd, NULL, false);
 
 		std::this_thread::sleep_until(timepoint_start + std::chrono::milliseconds(frame_duration_ms));
 	}

@@ -30,7 +30,7 @@
 #define SELFUP_FRAME_SIZE_MAX (256 * 1024 * 1024)
 #define SELFUP_LONG_TIMEOUT_MS (30 * 1000)
 
-#define NS_STATUS(cstr) do { NS_LOG_SZ(cstr, strlen(cstr)); NS_GUI_STATUS(cstr); } while (0);
+#define NS_STATUS(cstr) do { NS_LOG_SZ(cstr, strlen(cstr)); NS_GUI_STATUS(cstr); } while (0)
 
 #define NS_LOGDUMP(node, service, magic) do { NS_LOG_LOCK(); TCPLogDump::dumpResolving((node), (service), (magic), g_log->getBuf().data(), g_log->getBuf().size()); } while (0);
 
