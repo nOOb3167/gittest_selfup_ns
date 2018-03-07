@@ -60,6 +60,7 @@ class SelfupWork1 : public SelfupWork
 public:
 	SelfupWork1(const char *node, const char *service, std::shared_ptr<SelfupConExt1> ext) :
 		SelfupWork(node, service),
+		m_respond(new SelfupRespond(std::shared_ptr<TCPSocket>(new TCPSocket(node, service, tcpsocket_connect_tag_t())))),
 		m_ext(ext)
 	{}
 
@@ -142,6 +143,7 @@ public:
 	}
 
 private:
+	std::unique_ptr<SelfupRespond> m_respond;
 	std::shared_ptr<SelfupConExt1> m_ext;
 };
 
@@ -171,6 +173,7 @@ class SelfupWork2 : public SelfupWork
 public:
 	SelfupWork2(const char *node, const char *service, std::shared_ptr<SelfupConExt2> ext) :
 		SelfupWork(node, service),
+		m_respond(new SelfupRespond(std::shared_ptr<TCPSocket>(new TCPSocket(node, service, tcpsocket_connect_tag_t())))),
 		m_ext(ext)
 	{}
 
@@ -395,6 +398,7 @@ public:
 	}
 
 private:
+	std::unique_ptr<SelfupRespond> m_respond;
 	std::shared_ptr<SelfupConExt2> m_ext;
 };
 

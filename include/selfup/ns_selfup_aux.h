@@ -56,8 +56,6 @@ public:
 	void join();
 
 protected:
-	std::shared_ptr<TCPSocket>     m_sock;
-	std::unique_ptr<SelfupRespond> m_respond;
 	std::unique_ptr<std::thread> m_thread;
 	std::exception_ptr           m_thread_exc;
 };

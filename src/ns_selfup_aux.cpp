@@ -26,8 +26,6 @@ NetworkPacket SelfupRespond::waitFrame()
 }
 
 SelfupWork::SelfupWork(const char * node, const char * service) :
-	m_sock(new TCPSocket(node, service, tcpsocket_connect_tag_t())),
-	m_respond(new SelfupRespond(m_sock)),
 	m_thread(),
 	m_thread_exc()
 {}
