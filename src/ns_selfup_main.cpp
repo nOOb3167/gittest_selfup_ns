@@ -55,7 +55,7 @@ public:
 	std::unique_ptr<std::string> m_update_buffer;
 };
 
-class SelfupWork1 : public SelfupWork
+class SelfupWork1 : public SelfupThread
 {
 public:
 	SelfupWork1(const char *node, const char *service, std::shared_ptr<SelfupConExt1> ext) :
@@ -167,7 +167,7 @@ public:
 	bool m_update_have;
 };
 
-class SelfupWork2 : public SelfupWork
+class SelfupWork2 : public SelfupThread
 {
 public:
 	SelfupWork2(const char *node, const char *service, std::shared_ptr<SelfupConExt2> ext) :

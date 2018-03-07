@@ -25,7 +25,7 @@ NetworkPacket SelfupRespond::waitFrame()
 	return m_sock->Recv();
 }
 
-void SelfupWork::threadFunc()
+void SelfupThread::threadFunc()
 {
 	try {
 		virtualThreadFunc();
@@ -35,12 +35,12 @@ void SelfupWork::threadFunc()
 	}
 }
 
-void SelfupWork::start()
+void SelfupThread::start()
 {
-	m_thread.reset(new std::thread(&SelfupWork::threadFunc, this));
+	m_thread.reset(new std::thread(&SelfupThread::threadFunc, this));
 }
 
-void SelfupWork::join()
+void SelfupThread::join()
 {
 	m_thread->join();
 

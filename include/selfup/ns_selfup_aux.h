@@ -40,10 +40,10 @@ private:
 	std::shared_ptr<TCPSocket> m_sock;
 };
 
-class SelfupWork
+class SelfupThread
 {
 public:
-	virtual ~SelfupWork() = default;
+	virtual ~SelfupThread() = default;
 
 	void threadFunc();
 
