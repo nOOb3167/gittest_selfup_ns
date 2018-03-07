@@ -6,6 +6,8 @@
 #include <string>
 #include <vector>
 
+#include <time.h>
+
 #ifdef _WIN32
 #include <windows.h>
 #include <shlwapi.h> // PathAppend etc
@@ -30,6 +32,21 @@
 
 namespace ns_filesys
 {
+
+long long timestamp()
+{
+	struct timespec tspec = {};
+
+#ifdef _WIN32
+	/* supposedly not available in VS2013 - switch to something else */
+	if (! timespec_get(&tspec, TIME_UTC))
+		throw std::runtime_error("timestamp get");
+#else
+	if (!! clock_gettime(CLOCK_MONOTONIC, &tspec))
+		throw std::runtime_error("timestamp get");
+#endif
+	return (tspec.tv_sec * 1000) + (tspec.tv_nsec / (1000 * 1000));
+}
 
 std::string build_modified_filename(
 	std::string base_filename,

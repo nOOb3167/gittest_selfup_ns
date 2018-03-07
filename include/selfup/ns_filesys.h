@@ -17,6 +17,8 @@ public:
 namespace ns_filesys
 {
 
+long long timestamp();
+
 std::string build_modified_filename(
 	std::string base_filename,
 	std::string expected_suffix,
