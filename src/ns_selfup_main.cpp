@@ -410,7 +410,7 @@ void selfup_dryrun(std::string exe_filename)
 
 void selfup_reexec(std::string exe_filename)
 {
-	ns_filesys::process_start(exe_filename, { SELFUP_ARG_CHILD}, NULL);
+	ns_filesys::process_start(exe_filename, { SELFUP_ARG_CHILD }, NULL);
 }
 
 void selfup_mainexec(std::string exe_filename)
