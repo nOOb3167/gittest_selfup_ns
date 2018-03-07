@@ -60,17 +60,3 @@ void SelfupWork::join()
 		}
 	}
 }
-
-void SelfupWork::readEnsureCmd(NetworkPacket * packet, uint8_t cmdid)
-{
-	if (cmdid != readGetCmd(packet))
-		throw ProtocolExc("cmd");
-}
-
-uint8_t SelfupWork::readGetCmd(NetworkPacket * packet)
-{
-	assert(packet->isReset());
-	uint8_t c;
-	(*packet) >> c;
-	return c;
-}

@@ -75,7 +75,7 @@ public:
 		m_respond->respondOneshot(std::move(packet_req_latest));
 
 		NetworkPacket res_latest_pkt = m_respond->waitFrame();
-		readEnsureCmd(&res_latest_pkt, SELFUP_CMD_RESPONSE_LATEST_SELFUPDATE_BLOB);
+		res_latest_pkt.readEnsureCmd(SELFUP_CMD_RESPONSE_LATEST_SELFUPDATE_BLOB);
 		NS_STATUS("selfup net latest response");
 		git_oid res_latest_oid = {};
 		git_oid_fromraw(&res_latest_oid, (const unsigned char *) res_latest_pkt.inSizedStr(GIT_OID_RAWSZ));
@@ -119,7 +119,7 @@ public:
 		/* RES_OBJS3 */
 
 		NetworkPacket res_obj_pkt = m_respond->waitFrame();
-		readEnsureCmd(&res_obj_pkt, SELFUP_CMD_RESPONSE_OBJS3);
+		res_obj_pkt.readEnsureCmd(SELFUP_CMD_RESPONSE_OBJS3);
 		NS_STATUS("selfup net objs res");
 		uint32_t res_obj_blen = 0;
 		res_obj_pkt >> res_obj_blen;
@@ -137,7 +137,7 @@ public:
 		/* RES_OBJS3_DONE */
 
 		NetworkPacket res_obj_done_pkt = m_respond->waitFrame();
-		readEnsureCmd(&res_obj_done_pkt, SELFUP_CMD_RESPONSE_OBJS3_DONE);
+		res_obj_done_pkt.readEnsureCmd(SELFUP_CMD_RESPONSE_OBJS3_DONE);
 		NS_STATUS("selfup net objs done");
 	}
 
@@ -189,7 +189,7 @@ public:
 		m_respond->respondOneshot(std::move(packet_req_latest));
 
 		NetworkPacket res_latest_pkt = m_respond->waitFrame();
-		readEnsureCmd(&res_latest_pkt, SELFUP_CMD_RESPONSE_LATEST_COMMIT_TREE);
+		res_latest_pkt.readEnsureCmd(SELFUP_CMD_RESPONSE_LATEST_COMMIT_TREE);
 		NS_STATUS("mainup net latest response");
 		git_oid res_latest_oid = {};
 		git_oid_fromraw(&res_latest_oid, (const unsigned char *) res_latest_pkt.inSizedStr(GIT_OID_RAWSZ));
@@ -214,7 +214,7 @@ public:
 		m_respond->respondOneshot(std::move(req_treelist_pkt));
 
 		NetworkPacket res_treelist_pkt = m_respond->waitFrame();
-		readEnsureCmd(&res_treelist_pkt, SELFUP_CMD_RESPONSE_TREELIST);
+		res_treelist_pkt.readEnsureCmd(SELFUP_CMD_RESPONSE_TREELIST);
 		NS_STATUS("mainup net treelist response");
 		uint32_t res_treelist_treenum = 0;
 		std::vector<git_oid> res_treelist_treevec;
@@ -368,7 +368,7 @@ public:
 		unique_ptr_gitodb odb(selfup_git_repository_odb(repo), deleteGitodb);
 		while (true) {
 			NetworkPacket res_blobs = m_respond->waitFrame();
-			uint8_t res_blobs_cmd = readGetCmd(&res_blobs);
+			uint8_t res_blobs_cmd = res_blobs.readGetCmd();
 
 			if (res_blobs_cmd == SELFUP_CMD_RESPONSE_OBJS3) {
 				uint32_t size = 0;

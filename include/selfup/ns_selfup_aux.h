@@ -55,10 +55,6 @@ public:
 
 	void join();
 
-	void readEnsureCmd(NetworkPacket *packet, uint8_t cmdid);
-
-	uint8_t readGetCmd(NetworkPacket *packet);
-
 protected:
 	std::shared_ptr<TCPSocket>     m_sock;
 	std::unique_ptr<SelfupRespond> m_respond;

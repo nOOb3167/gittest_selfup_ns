@@ -178,3 +178,17 @@ NetworkPacket& NetworkPacket::operator<<(uint32_t src)
 	m_off += 4;
 	return *this;
 }
+
+void NetworkPacket::readEnsureCmd(uint8_t cmdid)
+{
+	if (cmdid != readGetCmd())
+		throw ProtocolExc("cmd");
+}
+
+uint8_t NetworkPacket::readGetCmd()
+{
+	assert(isReset());
+	uint8_t c;
+	*this >> c;
+	return c;
+}

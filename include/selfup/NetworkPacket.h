@@ -66,6 +66,9 @@ public:
 	NetworkPacket& operator>>(uint32_t& dst);
 	NetworkPacket& operator<<(uint32_t src);
 
+	void readEnsureCmd(uint8_t cmdid);
+	uint8_t readGetCmd();
+
 private:
 	std::vector<uint8_t> m_data;
 	size_t m_off;
