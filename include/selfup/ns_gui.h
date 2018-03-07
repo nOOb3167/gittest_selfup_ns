@@ -12,7 +12,7 @@
 #define GS_GUI_COLOR_MASK_RGB 0x00FF00
 #define GS_GUI_COLOR_MASK_BGR 0x00FF00
 
-#define NS_AUX_LOCK() std::lock_guard<std::mutex> lock(g_gui_ctx->getMutex())
+#define NS_AUX_LOCK() std::unique_lock<std::mutex> lock(g_gui_ctx->getMutex())
 #define NS_AUX_PRGS() (g_gui_ctx->getProgress())
 #define NS_AUX_RFSH() (g_gui_ctx->refreshRequest())
 
@@ -160,9 +160,7 @@ public:
 	{
 		if (g_gui_ctx)
 			throw std::runtime_error("ctx global");
-		std::unique_ptr<GuiCtx> ctx(new GuiCtx());
-		std::lock_guard<std::mutex> lock(ctx->getMutex());
-		g_gui_ctx = std::move(ctx);
+		g_gui_ctx = std::unique_ptr<GuiCtx>(new GuiCtx());
 	}
 
 private:

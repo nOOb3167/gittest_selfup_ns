@@ -8,12 +8,10 @@
 
 #include <selfup/ns_systemd.h>
 
-#define NS_LOG_LOCK() std::lock_guard<std::mutex> lock(g_log->getMutex())
+#define NS_LOG_SZ(msg, msg_len) do { g_log->logSimple((msg), (msg_len)); } while (0)
 
-#define NS_LOG_SZ(msg, msg_len) do { NS_LOG_LOCK(); g_log->logSimple((msg), (msg_len)); } while (0)
-
-#define NS_SOG_DUMP(msg, msg_len) do { NS_LOG_LOCK(); g_log->srvLogDump((msg), (msg_len)); } while (0)
-#define NS_SOG_PF(...)            do { NS_LOG_LOCK(); g_log->srvLogPf(__FILE__, __LINE__, __VA_ARGS__); } while(0)
+#define NS_SOG_DUMP(msg, msg_len) do { g_log->srvLogDump((msg), (msg_len)); } while (0)
+#define NS_SOG_PF(...)            do { g_log->srvLogPf(__FILE__, __LINE__, __VA_ARGS__); } while(0)
 
 namespace ns_log
 {

@@ -32,7 +32,7 @@
 
 #define NS_STATUS(cstr) do { NS_LOG_SZ(cstr, strlen(cstr)); NS_GUI_STATUS(cstr); } while (0)
 
-#define NS_LOGDUMP(node, service, magic) do { NS_LOG_LOCK(); TCPLogDump::dumpResolving((node), (service), (magic), g_log->getBuf().data(), g_log->getBuf().size()); } while (0);
+#define NS_LOGDUMP(node, service, magic) do { std::unique_lock<std::mutex>(g_log->getMutex()); TCPLogDump::dumpResolving((node), (service), (magic), g_log->getBuf().data(), g_log->getBuf().size()); } while (0);
 
 /* NOTE: attempting to exit with non-joined std::threads causes abort() */
 /* NOTE: main() must not leak exceptions due to reliance on stack unwinding (see RefKill) */

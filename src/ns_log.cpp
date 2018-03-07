@@ -1,6 +1,7 @@
 #include <cstdarg>
 #include <cstdio>
 #include <memory>
+#include <mutex>
 
 #include <selfup/ns_helpers.h>
 #include <selfup/ns_log.h>
@@ -23,6 +24,7 @@ NsLog::NsLog() :
 
 void NsLog::logSimple(const char * msg, size_t msg_len)
 {
+	std::unique_lock<std::mutex> lock(m_mutex);
 	m_buf.append("[raw]: ");
 	m_buf.append(msg, msg_len);
 	m_buf.append(1, '\n');
@@ -30,6 +32,7 @@ void NsLog::logSimple(const char * msg, size_t msg_len)
 
 void NsLog::srvLogDump(const char *msg, size_t msg_len)
 {
+	std::unique_lock<std::mutex> lock(m_mutex);
 	struct nsiovec iov[3] = {};
 	iov[0].iov_base = (void *) g_log_tls->virtualGetIdent().data();
 	iov[0].iov_len  = g_log_tls->virtualGetIdent().size();
@@ -43,6 +46,7 @@ void NsLog::srvLogDump(const char *msg, size_t msg_len)
 
 void NsLog::srvLogPf(const char *cpp_file, int cpp_line, const char *format, ...)
 {
+	std::unique_lock<std::mutex> lock(m_mutex);
 	// FIXME: what is a good length limit for vsnprintf ?
 	char buf[8192];
 
@@ -75,9 +79,7 @@ void NsLog::initGlobal()
 {
 	if (g_log)
 		throw std::runtime_error("log global");
-	std::unique_ptr<NsLog> log(new NsLog());
-	std::lock_guard<std::mutex> lock(log->getMutex());
-	g_log = std::move(log);
+	g_log = std::unique_ptr<NsLog>(new NsLog());
 	NsLog::threadInitTls(new NsLogTls());
 }
 
