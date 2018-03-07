@@ -712,6 +712,32 @@ void toplevel(const char *node, const char *service)
 	NS_STATUS("shutdown");
 }
 
+void global_initialization()
+{
+	/* init */
+
+	tcpthreaded_startup_helper();
+
+#ifdef NS_DEF_USING_LIBGIT2
+	if (git_libgit2_init() < 0)
+		throw std::runtime_error("libgit2 init");
+#endif
+
+	ns_conf::Conf::initGlobal();
+	ns_log::NsLog::initGlobal();
+	ns_gui::GuiCtx::initGlobal();
+
+	/* global config */
+
+	g_crash_mbox = g_conf->getDec("crash_mbox");
+	g_tcpasync_disable_timeout = g_conf->getDec("tcpasync_disable_timeout");
+	g_selfup_selfupdate_skip_fileops = g_conf->getDec("selfupdate_skip_fileops");
+
+	/* more init */
+
+	ns_crash_handler_setup(g_conf->get("serv_conn_addr").c_str(), g_conf->get("serv_port").c_str());
+}
+
 int main(int argc, char **argv)
 {
 	int ret = 0;
@@ -722,26 +748,11 @@ int main(int argc, char **argv)
 	if (argc >= 2 && std::string(argv[1]) == SELFUP_ARG_CHILD)
 		(void) 0;
 
-	tcpthreaded_startup_helper();
+	global_initialization();
 
-	if (git_libgit2_init() < 0)
-		throw std::runtime_error("libgit2 init");
-
-	ns_conf::Conf::initGlobal();
-	ns_log::NsLog::initGlobal();
-	ns_gui::GuiCtx::initGlobal();
 	g_gui_ctx->start();
 
-	g_crash_mbox = g_conf->getDec("crash_mbox");
-	g_tcpasync_disable_timeout = g_conf->getDec("tcpasync_disable_timeout");
-	g_selfup_selfupdate_skip_fileops = g_conf->getDec("selfupdate_skip_fileops");
-
-	std::string node = g_conf->get("serv_conn_addr");
-	std::string service = g_conf->get("serv_port");
-
-	ns_crash_handler_setup(node.c_str(), service.c_str());
-
-	NS_TOPLEVEL_CATCH_SELFUP(ret, toplevel, node.c_str(), service.c_str());
+	NS_TOPLEVEL_CATCH_SELFUP(ret, toplevel, g_conf->get("serv_conn_addr").c_str(), g_conf->get("serv_port").c_str());
 
 	g_gui_ctx->stopRequest();
 	g_gui_ctx->join();

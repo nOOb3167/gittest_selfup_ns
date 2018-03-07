@@ -10,6 +10,7 @@
 #include <windows.h>
 #include <wingdi.h>
 
+#include <ns_version.h>
 #include <selfup/ns_gui.h>
 #include <selfup/ns_log.h>
 #include <imgpbblip_96_32_.h>
@@ -309,6 +310,8 @@ void win_draw_redraw_window(HWND hwnd, HDC hdc)
 	}
 
 	win_draw_progress_status(hdc, 4, 64, g_gui_ctx->getProgress().m_status);
+
+	win_draw_progress_status(hdc, 2, 1, NS_GITVER);
 }
 
 LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam)
