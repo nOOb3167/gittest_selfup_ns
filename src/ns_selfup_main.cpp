@@ -32,8 +32,6 @@
 
 #define NS_STATUS(cstr) do { NS_LOG_SZ(cstr, strlen(cstr)); NS_GUI_STATUS(cstr); } while (0)
 
-#define NS_LOGDUMP(node, service, magic) do { std::unique_lock<std::mutex>(g_log->getMutex()); TCPLogDump::dumpResolving((node), (service), (magic), g_log->getBuf().data(), g_log->getBuf().size()); } while (0);
-
 /* NOTE: attempting to exit with non-joined std::threads causes abort() */
 /* NOTE: main() must not leak exceptions due to reliance on stack unwinding (see RefKill) */
 #define NS_TOPLEVEL_CATCH_SELFUP(retname, funcname, ...)	\
@@ -749,7 +747,7 @@ int main(int argc, char **argv)
 	g_gui_ctx->join();
 
 	if (!! ret)
-		NS_LOGDUMP(node.c_str(), service.c_str(), 0x04030201);
+		TCPASYNC_LOGDUMP(node.c_str(), service.c_str(), 0x04030201);
 
 	if (ret == 0)
 		return EXIT_SUCCESS;

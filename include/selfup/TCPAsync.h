@@ -13,12 +13,15 @@
 #include <thread>
 #include <vector>
 
+#include <selfup/ns_log.h>
 #include <selfup/TCPAddress.h>
 #include <selfup/NetworkPacket.h>
 
 #define TCPASYNC_FRAME_SIZE_MAX (256 * 1024 * 1024)
 #define TCPASYNC_SENDFILE_COUNT_PARAM 524288
 #define TCPASYNC_ACCEPT_RCVTIMEO_MSEC 30000
+
+#define TCPASYNC_LOGDUMP(node, service, magic) do { std::unique_lock<std::mutex>(g_log->getMutex()); TCPLogDump::dumpResolving((node), (service), (magic), g_log->getBuf().data(), g_log->getBuf().size()); } while (0)
 
 extern int g_tcpasync_disable_timeout;
 
