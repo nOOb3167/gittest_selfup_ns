@@ -58,6 +58,7 @@ SET(SELFUP_NS_HEADERS
 	${COMMON_NS_HEADERS}
 	include/selfup/ns_git_aux.h
 	include/selfup/ns_gui.h
+	include/selfup/ns_selfup_aux.h
 	${CMAKE_BINARY_DIR}/imgpbblip_96_32_.h
 	${CMAKE_BINARY_DIR}/imgpbempty_384_32_.h
 	${CMAKE_BINARY_DIR}/imgpbfull_384_32_.h
@@ -74,6 +75,7 @@ SET(SELFUP_NS_SOURCES
 	src/ns_gui_win.cpp
 	src/ns_helpers.cpp
 	src/ns_log.cpp
+	src/ns_selfup_aux.cpp
 	src/ns_systemd.cpp
 	src/ns_thread.cpp
 	src/ns_selfup_main.cpp
