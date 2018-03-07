@@ -11,34 +11,23 @@
 #include <selfup/ns_selfup_aux.h>
 #include <selfup/TCPAsync.h>
 
-void SelfupRespond::respondOneshot(NetworkPacket packet)
-{
-	virtualRespond(std::move(packet));
-}
-
-NetworkPacket SelfupRespond::waitFrame()
-{
-	return std::move(virtualWaitFrame());
-}
-
-SelfupRespondWork::SelfupRespondWork(const std::shared_ptr<TCPSocket>& sock) :
+SelfupRespond::SelfupRespond(const std::shared_ptr<TCPSocket>& sock) :
 	m_sock(sock)
 {}
 
-void SelfupRespondWork::virtualRespond(NetworkPacket packet)
+void SelfupRespond::respondOneshot(NetworkPacket packet)
 {
 	m_sock->Send(&packet);
 }
 
-NetworkPacket SelfupRespondWork::virtualWaitFrame()
+NetworkPacket SelfupRespond::waitFrame()
 {
-	/* FIXME: timeout support */
 	return m_sock->Recv();
 }
 
 SelfupWork::SelfupWork(const char * node, const char * service) :
 	m_sock(new TCPSocket(node, service, tcpsocket_connect_tag_t())),
-	m_respond(new SelfupRespondWork(m_sock)),
+	m_respond(new SelfupRespond(m_sock)),
 	m_thread(),
 	m_thread_exc()
 {}

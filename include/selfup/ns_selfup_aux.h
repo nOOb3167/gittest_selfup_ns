@@ -31,26 +31,10 @@
 class SelfupRespond
 {
 public:
-	virtual ~SelfupRespond() = default;
+	SelfupRespond(const std::shared_ptr<TCPSocket>& sock);
 
 	void respondOneshot(NetworkPacket packet);
-
 	NetworkPacket waitFrame();
-
-protected:
-	virtual void virtualRespond(NetworkPacket packet) = 0;
-	virtual NetworkPacket virtualWaitFrame() = 0;
-};
-
-class SelfupRespondWork : public SelfupRespond
-{
-public:
-	SelfupRespondWork(const std::shared_ptr<TCPSocket> &sock);
-
-protected:
-	void virtualRespond(NetworkPacket packet) override;
-
-	NetworkPacket virtualWaitFrame() override;
 
 private:
 	std::shared_ptr<TCPSocket> m_sock;
