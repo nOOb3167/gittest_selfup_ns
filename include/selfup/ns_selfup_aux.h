@@ -43,8 +43,6 @@ private:
 class SelfupWork
 {
 public:
-	SelfupWork(const char *node, const char *service);
-
 	virtual ~SelfupWork() = default;
 
 	void threadFunc();

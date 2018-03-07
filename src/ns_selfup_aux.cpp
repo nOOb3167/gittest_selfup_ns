@@ -25,11 +25,6 @@ NetworkPacket SelfupRespond::waitFrame()
 	return m_sock->Recv();
 }
 
-SelfupWork::SelfupWork(const char * node, const char * service) :
-	m_thread(),
-	m_thread_exc()
-{}
-
 void SelfupWork::threadFunc()
 {
 	try {
