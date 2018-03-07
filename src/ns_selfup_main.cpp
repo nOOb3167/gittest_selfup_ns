@@ -8,6 +8,7 @@
 #include <stdexcept>
 #include <thread>
 #include <utility>
+#include <vector>
 
 #include <git2.h>
 
@@ -336,16 +337,12 @@ public:
 
 		NS_STATUS("mainup net headtree");
 
-		{
-			RefKill rfk(repo.get(), m_ext->m_refname);
+		git_oid repo_head_tree_oid = getHeadTreeOrDefaultZero(repo.get(), m_ext->m_refname);
 
-			git_oid repo_head_tree_oid = getHeadTree(repo.get(), m_ext->m_refname);
+		/* matching versions suggest an update is unnecessary */
 
-			/* matching versions suggest an update is unnecessary */
-
-			if (git_oid_cmp(&repo_head_tree_oid, &res_latest_oid) == 0)
-				return;
-		}
+		if (git_oid_cmp(&repo_head_tree_oid, &res_latest_oid) == 0)
+			return;
 
 		/* request list of trees comprising latest version */
 
@@ -433,12 +430,18 @@ public:
 		m_ext->confirmUpdate();
 	}
 
-	git_oid getHeadTree(git_repository *repo, const std::string &refname)
+	git_oid getHeadTreeOrDefaultZero(git_repository *repo, const std::string &refname)
 	{
-		git_oid oid_head(selfup_git_reference_name_to_id(repo, refname));
-		unique_ptr_gitcommit commit_head(selfup_git_commit_lookup(repo, &oid_head), deleteGitcommit);
-		unique_ptr_gittree   commit_tree(selfup_git_commit_tree(commit_head.get()), deleteGittree);
-		return *git_tree_id(commit_tree.get());
+		try {
+			git_oid oid_head(selfup_git_reference_name_to_id(repo, refname));
+			unique_ptr_gitcommit commit_head(selfup_git_commit_lookup(repo, &oid_head), deleteGitcommit);
+			unique_ptr_gittree   commit_tree(selfup_git_commit_tree(commit_head.get()), deleteGittree);
+			return *git_tree_id(commit_tree.get());
+		}
+		catch (const std::exception &e) {
+			git_oid oid_zero = {};
+			return oid_zero;
+		}
 	}
 
 	git_oid writeCommitDummy(git_repository *repo, git_oid tree_oid)
@@ -536,35 +539,20 @@ private:
 
 void selfup_dryrun(std::string exe_filename)
 {
-	std::string arg(SELFUP_ARG_VERSUB);
-	std::string command;
-	command.append(exe_filename);
-	command.append(" ");
-	command.append(arg);
-
-	int ret = system(command.c_str());
-
+	long long ret;
+	ns_filesys::process_start(exe_filename, { SELFUP_ARG_VERSUB }, &ret);
 	if (ret != SELFUP_ARG_VERSUB_SUCCESS_CODE)
 		throw std::runtime_error("dryrun retcode");
 }
 
-void selfup_reexec_probably_blocking(std::string exe_filename)
+void selfup_reexec(std::string exe_filename)
 {
-	std::string arg(SELFUP_ARG_CHILD);
-	std::string command;
-	command.append(exe_filename);
-	command.append(" ");
-	command.append(arg);
-
-	int ret_ignored = system(command.c_str());
+	ns_filesys::process_start(exe_filename, { SELFUP_ARG_CHILD}, NULL);
 }
 
-void selfup_mainexec_probably_blocking(std::string exe_filename)
+void selfup_mainexec(std::string exe_filename)
 {
-	std::string command;
-	command.append(exe_filename);
-
-	int ret_ignored = system(command.c_str());
+	ns_filesys::process_start(exe_filename, {}, NULL);
 }
 
 void selfup_checkout(std::string repopath, std::string refname, std::string checkoutpath)
@@ -649,7 +637,7 @@ void selfup_start_mainupdate_crank(const char *node, const char *service)
 
 	NS_STATUS("mainup checkout end");
 
-	selfup_mainexec_probably_blocking(ns_filesys::path_append_abs_rel(checkoutpath, "bin/minetest.exe"));
+	selfup_mainexec(ns_filesys::path_append_abs_rel(checkoutpath, "bin/minetest.exe"));
 }
 
 bool selfup_start_crank(const char *node, const char *service)
@@ -693,7 +681,7 @@ bool selfup_start_crank(const char *node, const char *service)
 
 	NS_STATUS("selfup filesys reexec");
 
-	selfup_reexec_probably_blocking(cur_exe_filename);
+	selfup_reexec(cur_exe_filename);
 
 	NS_STATUS("selfup filesys end");
 
