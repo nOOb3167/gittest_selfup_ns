@@ -747,7 +747,7 @@ int main(int argc, char **argv)
 	g_gui_ctx->join();
 
 	if (!! ret)
-		TCPASYNC_LOGDUMP(node.c_str(), service.c_str(), 0x04030201);
+		TCPASYNC_LOGDUMP(g_crash_addrinfo.get(), 0x04030201);
 
 	if (ret == 0)
 		return EXIT_SUCCESS;

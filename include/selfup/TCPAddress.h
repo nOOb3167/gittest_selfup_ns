@@ -3,6 +3,7 @@
 
 #include <cassert>
 #include <cstdint>
+#include <memory>
 #include <string>
 
 #ifdef _WIN32
@@ -26,8 +27,11 @@
 #include <unistd.h>
 #endif
 
+typedef ::std::unique_ptr<addrinfo, void(*)(addrinfo *p)> unique_ptr_addrinfo;
+
 struct address_ipv4_tag_t {};
 struct address_ipv6_tag_t {};
+struct address_sockaddr_tag_t {};
 struct address_storage_tag_t {};
 
 class Address
@@ -36,6 +40,7 @@ public:
 	Address();
 	Address(uint16_t port, uint32_t addr4, address_ipv4_tag_t);
 	Address(uint16_t port, uint16_t *addr6, size_t addr6_num, address_ipv6_tag_t);
+	Address(struct sockaddr *addr, long long addrlen, address_sockaddr_tag_t);
 	Address(struct sockaddr_storage *storage, address_storage_tag_t);
 
 	int      getFamily() const;
@@ -53,5 +58,11 @@ private:
 struct address_less_t {
 	bool operator()(const Address &a, const Address &b) const;
 };
+
+void delete_addrinfo(addrinfo *p);
+
+unique_ptr_addrinfo do_getaddrinfo(const char *node, const char *service, const addrinfo *hints);
+unique_ptr_addrinfo do_getaddrinfo_tcp(const char *node, const char *service);
+unique_ptr_addrinfo do_getaddrinfo_tcp_listen(const char *node, const char *service);
 
 #endif /* _TCPADDRESS_H_ */

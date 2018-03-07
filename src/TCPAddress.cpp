@@ -35,6 +35,15 @@ Address::Address(uint16_t port, uint16_t *addr6, size_t addr6_num, address_ipv6_
 		((uint16_t *)addr->sin6_addr.s6_addr)[i] = htons(addr6[i]);
 }
 
+Address::Address(struct sockaddr *addr, long long addrlen, address_sockaddr_tag_t) :
+	m_storage()
+{
+	assert(addrlen <= sizeof (sockaddr));
+	assert(addrlen <= sizeof (sockaddr_storage));
+	memset(&m_storage, '\0', sizeof (sockaddr_storage));
+	memcpy(&m_storage, addr, addrlen);
+}
+
 Address::Address(struct sockaddr_storage *storage, address_storage_tag_t) :
 	m_storage(*storage)
 {}
@@ -136,4 +145,40 @@ bool address_less_t::operator()(const Address &a, const Address &b) const
 	}
 
 	return false;
+}
+
+void delete_addrinfo(addrinfo *p)
+{
+	if (p)
+		freeaddrinfo(p);
+}
+
+unique_ptr_addrinfo do_getaddrinfo(const char *node, const char *service, const addrinfo *hints)
+{
+	addrinfo *res = NULL;
+	if (getaddrinfo(node, service, hints, &res) != 0)
+		throw std::runtime_error("getaddrinfo");
+	return unique_ptr_addrinfo(res, delete_addrinfo);
+}
+
+unique_ptr_addrinfo do_getaddrinfo_tcp(const char *node, const char *service)
+{
+	addrinfo hint = {};
+	hint.ai_flags = AI_V4MAPPED | AI_ADDRCONFIG;
+	hint.ai_family = AF_UNSPEC;
+	hint.ai_socktype = SOCK_STREAM;
+	hint.ai_protocol = 0;
+
+	return do_getaddrinfo(node, service, &hint);
+}
+
+unique_ptr_addrinfo do_getaddrinfo_tcp_listen(const char *node, const char *service)
+{
+	addrinfo hint = {};
+	hint.ai_flags = AI_V4MAPPED | AI_ADDRCONFIG | AI_PASSIVE;
+	hint.ai_family = AF_UNSPEC;
+	hint.ai_socktype = SOCK_STREAM;
+	hint.ai_protocol = 0;
+
+	return do_getaddrinfo(node, service, &hint);
 }

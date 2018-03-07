@@ -22,21 +22,6 @@
 
 int g_tcpasync_disable_timeout = 0;
 
-void delete_addrinfo(addrinfo *p)
-{
-	if (p)
-		freeaddrinfo(p);
-}
-
-addrinfo * do_getaddrinfo(const char *node, const char *service, const addrinfo *hints)
-{
-	addrinfo *res = NULL;
-	int r = getaddrinfo(node, service, hints, &res);
-	if (r != 0)
-		throw std::runtime_error("getaddrinfo");
-	return res;
-}
-
 TimeoutExc::TimeoutExc(const char * msg) :
 	std::runtime_error(msg)
 {}
@@ -227,36 +212,14 @@ void TCPThreaded::threadFunc2(const std::shared_ptr<ThreadCtx>& ctx)
 	}
 }
 
-void TCPLogDump::dumpResolving(const char *node, const char *service, uint32_t magic, const char *data, size_t data_len)
-{
-	addrinfo hint = {};
-	hint.ai_flags = AI_V4MAPPED | AI_ADDRCONFIG;
-	hint.ai_family = AF_UNSPEC;
-	hint.ai_socktype = SOCK_STREAM;
-	hint.ai_protocol = 0;
-
-	unique_ptr_addrinfo res(do_getaddrinfo(node, service, &hint), delete_addrinfo);
-
-	for (addrinfo *r = res.get(); r != NULL; r = r->ai_next) {
-		struct sockaddr_storage storage = {};
-		memcpy(&storage, r->ai_addr, r->ai_addrlen);
-		dump(Address(&storage, address_storage_tag_t()), r->ai_socktype, r->ai_protocol, magic, data, data_len);
-	}
-}
-
-void TCPLogDump::dump(Address addr, int socktype, int protocol, uint32_t magic, const char * data, size_t data_len)
+void TCPLogDump::dump(addrinfo *addr, uint32_t magic, const char * data, size_t data_len)
 {
 	NetworkPacket packet(SELFUP_CMD_LOGDUMP, networkpacket_cmd_tag_t());
 	packet << magic;
 	packet << (uint32_t)data_len;
 	packet.outSizedStr(data, data_len);
 
-	unique_ptr_fd sock(new int(socket(addr.getFamily(), socktype, protocol)), TCPSocket::deleteFd);
-	if (*sock < 0)
-		throw std::runtime_error("socket");
-	if (connect(*sock, (struct sockaddr *) addr.getStorage(), addr.getStorageLen()) < 0)
-		throw std::runtime_error("connect");
-
+	unique_ptr_fd sock(tcpthreaded_socket_connecting_helper_gai(addr));
 	tcpthreaded_blocking_write_helper(*sock, &packet, 0);
 }
 
@@ -286,17 +249,9 @@ void tcpthreaded_socket_close_helper(int *fd)
 	}
 }
 
-unique_ptr_fd tcpthreaded_socket_connecting_helper(const char *node, const char *service)
+unique_ptr_fd tcpthreaded_socket_connecting_helper_gai(addrinfo *addr)
 {
-	addrinfo hint = {};
-	hint.ai_flags = AI_V4MAPPED | AI_ADDRCONFIG;
-	hint.ai_family = AF_UNSPEC;
-	hint.ai_socktype = SOCK_STREAM;
-	hint.ai_protocol = 0;
-
-	unique_ptr_addrinfo res(do_getaddrinfo(node, service, &hint), delete_addrinfo);
-
-	for (addrinfo *r = res.get(); r != NULL; r = r->ai_next) {
+	for (addrinfo *r = addr; r != NULL; r = r->ai_next) {
 		unique_ptr_fd sock(new int(socket(r->ai_family, r->ai_socktype, r->ai_protocol)), TCPSocket::deleteFd);
 		if (*sock < 0)
 			continue;
@@ -306,6 +261,11 @@ unique_ptr_fd tcpthreaded_socket_connecting_helper(const char *node, const char 
 	}
 
 	throw std::runtime_error("socket connecting helper");
+}
+
+unique_ptr_fd tcpthreaded_socket_connecting_helper(const char *node, const char *service)
+{
+	return tcpthreaded_socket_connecting_helper_gai(do_getaddrinfo_tcp(node, service).get());
 }
 
 Address tcpthreaded_socket_peer_helper(int fd)
@@ -320,13 +280,7 @@ Address tcpthreaded_socket_peer_helper(int fd)
 
 unique_ptr_fd tcpthreaded_socket_listen_helper(const char *node, const char *service)
 {
-	addrinfo hint = {};
-	hint.ai_flags = AI_V4MAPPED | AI_ADDRCONFIG | AI_PASSIVE;
-	hint.ai_family = AF_UNSPEC;
-	hint.ai_socktype = SOCK_STREAM;
-	hint.ai_protocol = 0;
-
-	unique_ptr_addrinfo res(do_getaddrinfo(node, service, &hint), delete_addrinfo);
+	unique_ptr_addrinfo res(do_getaddrinfo_tcp_listen(node, service));
 
 	for (addrinfo *r = res.get(); r != NULL; r = r->ai_next) {
 		unique_ptr_fd sock(new int(socket(r->ai_family, r->ai_socktype, r->ai_protocol)), TCPSocket::deleteFd);
@@ -485,19 +439,11 @@ void tcpthreaded_socket_close_helper(int *fd)
 	}
 }
 
-unique_ptr_fd tcpthreaded_socket_connecting_helper(const char *node, const char *service)
+unique_ptr_fd tcpthreaded_socket_connecting_helper_gai(addrinfo *addr)
 {
 	int ret = 0;
 
-	addrinfo hint = {};
-	hint.ai_flags = AI_V4MAPPED | AI_ADDRCONFIG;
-	hint.ai_family = AF_UNSPEC;
-	hint.ai_socktype = SOCK_STREAM;
-	hint.ai_protocol = 0;
-
-	unique_ptr_addrinfo res(do_getaddrinfo(node, service, &hint), delete_addrinfo);
-
-	for (addrinfo *r = res.get(); r != NULL; r = r->ai_next) {
+	for (addrinfo *r = addr; r != NULL; r = r->ai_next) {
 		unique_ptr_fd sock(new int(socket(r->ai_family, r->ai_socktype, r->ai_protocol)), TCPSocket::deleteFd);
 		if (*sock < 0)
 			continue;
@@ -509,6 +455,11 @@ unique_ptr_fd tcpthreaded_socket_connecting_helper(const char *node, const char 
 	}
 
 	throw std::runtime_error("socket");
+}
+
+unique_ptr_fd tcpthreaded_socket_connecting_helper(const char *node, const char *service)
+{
+	return tcpthreaded_socket_connecting_helper_gai(do_getaddrinfo_tcp(node, service).get());
 }
 
 Address tcpthreaded_socket_peer_helper(int fd)
@@ -523,13 +474,7 @@ Address tcpthreaded_socket_peer_helper(int fd)
 
 unique_ptr_fd tcpthreaded_socket_listen_helper(const char *node, const char *service)
 {
-	addrinfo hint = {};
-	hint.ai_flags = AI_V4MAPPED | AI_ADDRCONFIG | AI_PASSIVE;
-	hint.ai_family = AF_UNSPEC;
-	hint.ai_socktype = SOCK_STREAM;
-	hint.ai_protocol = 0;
-
-	unique_ptr_addrinfo res(do_getaddrinfo(node, service, &hint), delete_addrinfo);
+	unique_ptr_addrinfo res(do_getaddrinfo_tcp_listen(node, service))
 
 	for (addrinfo *r = res.get(); r != NULL; r = r->ai_next) {
 		unique_ptr_fd sock(new int(socket(r->ai_family, r->ai_socktype, r->ai_protocol)), TCPSocket::deleteFd);

@@ -21,15 +21,13 @@
 #define TCPASYNC_SENDFILE_COUNT_PARAM 524288
 #define TCPASYNC_ACCEPT_RCVTIMEO_MSEC 30000
 
-#define TCPASYNC_LOGDUMP(node, service, magic) do { std::unique_lock<std::mutex>(g_log->getMutex()); TCPLogDump::dumpResolving((node), (service), (magic), g_log->getBuf().data(), g_log->getBuf().size()); } while (0)
+#define TCPASYNC_LOGDUMP(the_addrinfo, magic) do { std::unique_lock<std::mutex>(g_log->getMutex()); TCPLogDump::dump((the_addrinfo), (magic), g_log->getBuf().data(), g_log->getBuf().size()); } while (0)
 
 extern int g_tcpasync_disable_timeout;
 
 /* https://msdn.microsoft.com/en-us/library/windows/desktop/ms740516(v=vs.85).aspx */
 typedef ::std::unique_ptr<int, void(*)(int *fd)> unique_ptr_fd;
 typedef ::std::shared_ptr<int>                   shared_ptr_fd;
-
-typedef ::std::unique_ptr<addrinfo, void(*)(addrinfo *p)> unique_ptr_addrinfo;
 
 struct tcpsocket_connect_tag_t {};
 
@@ -124,14 +122,11 @@ private:
 class TCPLogDump
 {
 public:
-	static void dumpResolving(const char *node, const char *service, uint32_t magic, const char *data, size_t data_len);
-	static void dump(Address addr, int socktype, int protocol, uint32_t magic, const char * data, size_t data_len);
+	static void dump(addrinfo *addr, uint32_t magic, const char * data, size_t data_len);
 };
 
-void delete_addrinfo(addrinfo *p);
-addrinfo * do_getaddrinfo(const char *node, const char *service, const addrinfo *hints);
-
 void tcpthreaded_socket_close_helper(int *fd);
+unique_ptr_fd tcpthreaded_socket_connecting_helper_gai(addrinfo *addr);
 unique_ptr_fd tcpthreaded_socket_connecting_helper(const char *node, const char *service);
 Address tcpthreaded_socket_peer_helper(int fd);
 unique_ptr_fd tcpthreaded_socket_listen_helper(const char *node, const char *service);
