@@ -40,9 +40,9 @@ void deleteGitodb(git_odb *p);
 void deleteGitsignature(git_signature *p);
 void deleteGitreference(git_reference *p);
 
-git_blob *   selfup_git_blob_lookup(git_repository *repository, git_oid *oid);
-git_commit * selfup_git_commit_lookup(git_repository *repository, git_oid *oid);
-git_tree *   selfup_git_tree_lookup(git_repository *repository, git_oid *oid);
+git_blob *   selfup_git_blob_lookup(git_repository *repository, const git_oid *oid);
+git_commit * selfup_git_commit_lookup(git_repository *repository, const git_oid *oid);
+git_tree *   selfup_git_tree_lookup(git_repository *repository, const git_oid *oid);
 
 git_tree *   selfup_git_commit_tree(git_commit *commit);
 unique_ptr_gitcommit selfup_git_commit_dummy_ensure(git_repository *repo);

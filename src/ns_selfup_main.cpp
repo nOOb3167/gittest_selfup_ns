@@ -31,121 +31,6 @@
 
 int g_selfup_selfupdate_skip_fileops = 0;
 
-class SelfupConExt1
-{
-public:
-	SelfupConExt1(const std::string &cur_exe_filename, const std::string &refname) :
-		m_cur_exe_filename(cur_exe_filename),
-		m_refname(refname),
-		m_update_have(false),
-		m_update_buffer()
-	{}
-
-	void confirmUpdate(std::unique_ptr<std::string> update_buffer)
-	{
-		m_update_have = true;
-		m_update_buffer = std::move(update_buffer);
-	}
-
-public:
-	std::string                  m_cur_exe_filename;
-	std::string                  m_refname;
-
-	bool                         m_update_have;
-	std::unique_ptr<std::string> m_update_buffer;
-};
-
-class SelfupWork1 : public SelfupThread
-{
-public:
-	SelfupWork1(const char *node, const char *service, std::shared_ptr<SelfupConExt1> ext) :
-		m_respond(new SelfupRespond(std::shared_ptr<TCPSocket>(new TCPSocket(node, service, tcpsocket_connect_tag_t())))),
-		m_ext(ext)
-	{}
-
-	void virtualThreadFunc() override
-	{
-		unique_ptr_gitrepository memory_repository(selfup_git_memory_repository_new(), deleteGitrepository);
-
-		NS_STATUS("selfup net latest request");
-
-		NetworkPacket packet_req_latest(SELFUP_CMD_REQUEST_LATEST_SELFUPDATE_BLOB, networkpacket_cmd_tag_t());
-		packet_req_latest << (uint32_t) m_ext->m_refname.size();
-		packet_req_latest.outSizedStr(m_ext->m_refname.data(), m_ext->m_refname.size());
-		m_respond->respondOneshot(std::move(packet_req_latest));
-
-		NetworkPacket res_latest_pkt = m_respond->waitFrame();
-		res_latest_pkt.readEnsureCmd(SELFUP_CMD_RESPONSE_LATEST_SELFUPDATE_BLOB);
-		NS_STATUS("selfup net latest response");
-		git_oid res_latest_oid = {};
-		git_oid_fromraw(&res_latest_oid, (const unsigned char *) res_latest_pkt.inSizedStr(GIT_OID_RAWSZ));
-
-		NS_STATUS("selfup net hash");
-
-		git_oid oid_cur_exe = {};
-		/* empty as_path parameter means no filters applied */
-		if (!! git_repository_hashfile(&oid_cur_exe, memory_repository.get(), m_ext->m_cur_exe_filename.c_str(), GIT_OBJ_BLOB, ""))
-			throw std::runtime_error("hash");
-
-		if (git_oid_cmp(&oid_cur_exe, &res_latest_oid) == 0)
-			return;
-
-		NS_STATUS("selfup net objs request");
-
-		requestAndRecvAndWriteObj(memory_repository.get(), res_latest_oid);
-
-		NS_STATUS("selfup net objs updatebuf");
-
-		unique_ptr_gitblob blob(selfup_git_blob_lookup(memory_repository.get(), &res_latest_oid), deleteGitblob);
-
-		std::unique_ptr<std::string> update_buffer(new std::string((char *) git_blob_rawcontent(blob.get()), (size_t) git_blob_rawsize(blob.get())));
-
-		m_ext->confirmUpdate(std::move(update_buffer));
-
-		return;
-	}
-
-	void requestAndRecvAndWriteObj(git_repository *memory_repository, git_oid missing_obj_oid)
-	{
-		/* REQ_OBJS3 */
-
-		NS_STATUS("selfup net objs req");
-
-		NetworkPacket req_obj_pkt(SELFUP_CMD_REQUEST_OBJS3, networkpacket_cmd_tag_t());
-		req_obj_pkt << (uint32_t) 1;
-		req_obj_pkt.outSizedStr((char *) missing_obj_oid.id, GIT_OID_RAWSZ);
-		m_respond->respondOneshot(std::move(req_obj_pkt));
-
-		/* RES_OBJS3 */
-
-		NetworkPacket res_obj_pkt = m_respond->waitFrame();
-		res_obj_pkt.readEnsureCmd(SELFUP_CMD_RESPONSE_OBJS3);
-		NS_STATUS("selfup net objs res");
-		uint32_t res_obj_blen = 0;
-		res_obj_pkt >> res_obj_blen;
-
-		ns_git::NsGitObject obj(ns_git::read_object_memory_ex(std::string(res_obj_pkt.inSizedStr(res_obj_blen), res_obj_blen)));
-
-		NS_STATUS("selfup net objs write");
-
-		git_oid written_oid = {};
-		if (!! git_blob_create_frombuffer(&written_oid, memory_repository, obj.m_inflated.data() + obj.m_inflated_offset, obj.m_inflated_size))
-			throw std::runtime_error("blob create from buffer");
-		if (git_oid_cmp(&written_oid, &missing_obj_oid) != 0)
-			throw std::runtime_error("blob mismatch");
-
-		/* RES_OBJS3_DONE */
-
-		NetworkPacket res_obj_done_pkt = m_respond->waitFrame();
-		res_obj_done_pkt.readEnsureCmd(SELFUP_CMD_RESPONSE_OBJS3_DONE);
-		NS_STATUS("selfup net objs done");
-	}
-
-private:
-	std::unique_ptr<SelfupRespond> m_respond;
-	std::shared_ptr<SelfupConExt1> m_ext;
-};
-
 class SelfupConExt2
 {
 public:
@@ -449,6 +334,25 @@ void selfup_checkout(std::string repopath, std::string refname, std::string chec
 	}
 }
 
+std::string selfup_checkout_memory(std::string repopath, std::string refname)
+{
+	unique_ptr_gitrepository repo(selfup_git_repository_open(repopath), deleteGitrepository);
+
+	{
+		RefKill rki(repo.get(), refname);
+
+		git_oid commit_head_oid(selfup_git_reference_name_to_id(repo.get(), refname));
+		unique_ptr_gitcommit commit_head(selfup_git_commit_lookup(repo.get(), &commit_head_oid), deleteGitcommit);
+		unique_ptr_gittree   commit_tree(selfup_git_commit_tree(commit_head.get()), deleteGittree);
+
+		const git_tree_entry *entry = git_tree_entry_byname(commit_tree.get(), SELFUP_SELFUPDATE_BLOB_ENTRY_FILENAME);
+		unique_ptr_gitblob blob(selfup_git_blob_lookup(repo.get(), git_tree_entry_id(entry)), deleteGitblob);
+		std::string update_buffer((char *)git_blob_rawcontent(blob.get()), (size_t)git_blob_rawsize(blob.get()));
+		return update_buffer;
+	}
+	throw std::runtime_error("checkout memory");
+}
+
 unique_ptr_gitrepository selfup_ensure_repository(const std::string &repopath, const std::string &sanity_check_lump)
 {
 	if (repopath.substr(repopath.size() - sanity_check_lump.size()) != sanity_check_lump)
@@ -506,8 +410,11 @@ void selfup_start_mainupdate_crank(const char *node, const char *service)
 bool selfup_start_crank(const char *node, const char *service)
 {
 	std::string cur_exe_filename = ns_filesys::current_executable_filename();
-	std::shared_ptr<SelfupConExt1> ext(new SelfupConExt1(cur_exe_filename, "refs/heads/selfup"));
-	std::unique_ptr<SelfupWork1> work(new SelfupWork1(node, service, ext));
+	std::string repopath = ns_filesys::current_executable_relative_filename("clnt_repo/.git");
+	std::string refname = "refs/heads/selfup";
+	selfup_ensure_repository(repopath, ".git");
+	std::shared_ptr<SelfupConExt2> ext(new SelfupConExt2(repopath, refname));
+	std::unique_ptr<SelfupWork2> work(new SelfupWork2(node, service, ext));
 
 	NS_STATUS("selfup net start");
 
@@ -531,7 +438,9 @@ bool selfup_start_crank(const char *node, const char *service)
 
 	NS_STATUS("selfup filesys write");
 
-	ns_filesys::file_write_frombuffer(temp_filename, ext->m_update_buffer->data(), ext->m_update_buffer->size());
+	std::string update_buffer = selfup_checkout_memory(repopath, refname);
+
+	ns_filesys::file_write_frombuffer(temp_filename, update_buffer.data(), update_buffer.size());
 
 	NS_STATUS("selfup filesys dryrun");
 

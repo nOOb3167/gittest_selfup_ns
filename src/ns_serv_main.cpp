@@ -131,21 +131,6 @@ public:
 		}
 		break;
 
-		case SELFUP_CMD_REQUEST_LATEST_SELFUPDATE_BLOB:
-		{
-			uint32_t refnum = 0;
-
-			(*packet) >> refnum;
-
-			std::string refname(packet->inSizedStr(refnum), refnum);
-			ns_git_oid latest_oid(latest_selfupdate_blob_oid(m_ext->m_repopath, refname, SELFUP_SELFUPDATE_BLOB_ENTRY_FILENAME));
-
-			NetworkPacket res_latest_selfupdate_pkt(SELFUP_CMD_RESPONSE_LATEST_SELFUPDATE_BLOB, networkpacket_cmd_tag_t());
-			res_latest_selfupdate_pkt.outSizedStr((char *) latest_oid.id, NS_GIT_OID_RAWSZ);
-			respond->respondOneshot(std::move(res_latest_selfupdate_pkt));
-		}
-		break;
-
 		case SELFUP_CMD_REQUEST_LATEST_COMMIT_TREE:
 		{
 			uint32_t refnum = 0;

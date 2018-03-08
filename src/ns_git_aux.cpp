@@ -87,7 +87,7 @@ void deleteGitreference(git_reference * p)
 		git_reference_free(p);
 }
 
-git_blob * selfup_git_blob_lookup(git_repository * repository, git_oid * oid)
+git_blob * selfup_git_blob_lookup(git_repository * repository, const git_oid * oid)
 {
 	git_blob *p = NULL;
 	if (!! git_blob_lookup(&p, repository, oid))
@@ -95,7 +95,7 @@ git_blob * selfup_git_blob_lookup(git_repository * repository, git_oid * oid)
 	return p;
 }
 
-git_commit * selfup_git_commit_lookup(git_repository * repository, git_oid * oid)
+git_commit * selfup_git_commit_lookup(git_repository * repository, const git_oid * oid)
 {
 	// FIXME: not sure if GIT_ENOTFOUND return counts as official API for git_commit_lookup
 	//        but may be useful as optional extra failure information ?
@@ -105,7 +105,7 @@ git_commit * selfup_git_commit_lookup(git_repository * repository, git_oid * oid
 	return p;
 }
 
-git_tree * selfup_git_tree_lookup(git_repository * repository, git_oid * oid)
+git_tree * selfup_git_tree_lookup(git_repository * repository, const git_oid * oid)
 {
 	git_tree *p = NULL;
 	if (!! git_tree_lookup(&p, repository, oid))
