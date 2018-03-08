@@ -60,5 +60,6 @@ unique_ptr_gitsignature selfup_git_signature_new_dummy();
 unique_ptr_gitreference selfup_git_reference_create_and_force_set(git_repository *repo, const std::string &refname, git_oid commit_oid);
 git_oid         selfup_git_reference_name_to_id(git_repository *repo, const std::string &refname);
 
+git_oid selfup_git_reference_get_tree_or_default_zero(git_repository *repo, const std::string &refname);
 
 #endif /* _NS_GIT_AUX_ */

@@ -60,6 +60,15 @@ public:
 		m_ext(ext)
 	{}
 
+	static void runOneshot(std::string repopath, std::string refname, const char *node, const char *service)
+	{
+		std::shared_ptr<SelfupConExt2> ext(new SelfupConExt2(repopath, refname));
+		std::unique_ptr<SelfupWork2> work(new SelfupWork2(node, service, ext));
+
+		work->start();
+		work->join();
+	}
+
 	void virtualThreadFunc() override
 	{
 		git_oid oid_zero = {};
@@ -84,7 +93,7 @@ public:
 
 		NS_STATUS("mainup net headtree");
 
-		git_oid repo_head_tree_oid = getHeadTreeOrDefaultZero(repo.get(), m_ext->m_refname);
+		git_oid repo_head_tree_oid = selfup_git_reference_get_tree_or_default_zero(repo.get(), m_ext->m_refname);
 
 		/* matching versions suggest an update is unnecessary */
 
@@ -175,20 +184,6 @@ public:
 		unique_ptr_gitreference new_ref(selfup_git_reference_create_and_force_set(repo.get(), m_ext->m_refname, new_commit_oid));
 
 		m_ext->confirmUpdate();
-	}
-
-	git_oid getHeadTreeOrDefaultZero(git_repository *repo, const std::string &refname)
-	{
-		try {
-			git_oid oid_head(selfup_git_reference_name_to_id(repo, refname));
-			unique_ptr_gitcommit commit_head(selfup_git_commit_lookup(repo, &oid_head));
-			unique_ptr_gittree   commit_tree(selfup_git_commit_tree(commit_head.get()));
-			return *git_tree_id(commit_tree.get());
-		}
-		catch (const std::exception &e) {
-			git_oid oid_zero = {};
-			return oid_zero;
-		}
 	}
 
 	git_oid writeCommitDummy(git_repository *repo, git_oid tree_oid)
@@ -305,7 +300,10 @@ void selfup_mainexec(std::string exe_filename)
 
 void selfup_checkout(std::string repopath, std::string refname, std::string checkoutpath)
 {
+	NS_STATUS("mainup checkout start");
+
 	NS_STATUS("mainup checkout makedir");
+
 	ns_filesys::directory_create_unless_exist(checkoutpath);
 
 	NS_STATUS("mainup checkout ref and tree");
@@ -332,6 +330,8 @@ void selfup_checkout(std::string repopath, std::string refname, std::string chec
 		if (!! git_checkout_tree(repo.get(), (git_object *) commit_tree.get(), &opts))
 			throw std::runtime_error("checkout tree");
 	}
+
+	NS_STATUS("mainup checkout end");
 }
 
 std::string selfup_checkout_memory(std::string repopath, std::string refname)
@@ -351,6 +351,53 @@ std::string selfup_checkout_memory(std::string repopath, std::string refname)
 		return update_buffer;
 	}
 	throw std::runtime_error("checkout memory");
+}
+
+bool selfup_selfcheck_isoutdated(std::string repopath, std::string refname, std::string cur_exe_filename)
+{
+	unique_ptr_gitrepository repo(selfup_git_repository_open(repopath));
+	
+	git_oid oid_cur_exe = {};
+	if (!! git_odb_hashfile(&oid_cur_exe, cur_exe_filename.c_str(), GIT_OBJ_BLOB))
+		throw std::runtime_error("hash");
+
+	git_oid oid_commit_tree = selfup_git_reference_get_tree_or_default_zero(repo.get(), refname);
+	unique_ptr_gittree commit_tree(selfup_git_tree_lookup(repo.get(), &oid_commit_tree));
+	const git_tree_entry *entry = git_tree_entry_byname(commit_tree.get(), SELFUP_SELFUPDATE_BLOB_ENTRY_FILENAME);
+	unique_ptr_gitblob blob(selfup_git_blob_lookup(repo.get(), git_tree_entry_id(entry)));
+
+	return git_oid_cmp(&oid_cur_exe, git_blob_id(blob.get())) != 0;
+}
+
+void selfup_selfoverwrite_and_reexec(std::string repopath, std::string refname, std::string cur_exe_filename)
+{
+	NS_STATUS("selfup filesys start");
+
+	std::string temp_filename = ns_filesys::build_modified_filename(
+		cur_exe_filename, "", ".exe", "_helper", ".exe");
+	std::string old_filename = ns_filesys::build_modified_filename(
+		cur_exe_filename, "", ".exe", "_helper_old", ".exe");
+
+	NS_STATUS("selfup filesys write");
+
+	std::string update_buffer = selfup_checkout_memory(repopath, refname);
+
+	ns_filesys::file_write_frombuffer(temp_filename, update_buffer.data(), update_buffer.size());
+
+	NS_STATUS("selfup filesys dryrun");
+
+	selfup_dryrun(temp_filename);
+
+	NS_STATUS("selfup filesys rename");
+
+	ns_filesys::rename_file_file(cur_exe_filename, old_filename);
+	ns_filesys::rename_file_file(temp_filename, cur_exe_filename);
+
+	NS_STATUS("selfup filesys reexec");
+
+	selfup_reexec(cur_exe_filename);
+
+	NS_STATUS("selfup filesys end");
 }
 
 unique_ptr_gitrepository selfup_ensure_repository(const std::string &repopath, const std::string &sanity_check_lump)
@@ -382,94 +429,38 @@ unique_ptr_gitrepository selfup_ensure_repository(const std::string &repopath, c
 	return unique_ptr_gitrepository(repo, deleteGitrepository);
 }
 
-void selfup_start_mainupdate_crank(const char *node, const char *service)
-{
-	std::string repopath = ns_filesys::current_executable_relative_filename("clnt_repo/.git");
-	std::string refname = "refs/heads/mainup";
-	std::string checkoutpath = ns_filesys::current_executable_relative_filename("clnt_chkout");
-	selfup_ensure_repository(repopath, ".git");
-	std::shared_ptr<SelfupConExt2> ext(new SelfupConExt2(repopath, refname));
-	std::unique_ptr<SelfupWork2> work(new SelfupWork2(node, service, ext));
-
-	NS_STATUS("mainup net start");
-
-	work->start();
-	work->join();
-
-	NS_STATUS("mainup net end");
-
-	NS_STATUS("mainup checkout start");
-
-	selfup_checkout(repopath, refname, checkoutpath);
-
-	NS_STATUS("mainup checkout end");
-
-	selfup_mainexec(ns_filesys::path_append_abs_rel(checkoutpath, "bin/minetest.exe"));
-}
-
-bool selfup_start_crank(const char *node, const char *service)
+void toplevel(const char *node, const char *service)
 {
 	std::string cur_exe_filename = ns_filesys::current_executable_filename();
 	std::string repopath = ns_filesys::current_executable_relative_filename("clnt_repo/.git");
-	std::string refname = "refs/heads/selfup";
+	std::string refname_selfup = "refs/heads/selfup";
+	std::string refname_mainup = "refs/heads/mainup";
+	std::string checkoutpath = ns_filesys::current_executable_relative_filename("clnt_chkout");
+	std::string main_exe_filename = ns_filesys::path_append_abs_rel(checkoutpath, "bin/minetest.exe");
+
 	selfup_ensure_repository(repopath, ".git");
-	std::shared_ptr<SelfupConExt2> ext(new SelfupConExt2(repopath, refname));
-	std::unique_ptr<SelfupWork2> work(new SelfupWork2(node, service, ext));
 
 	NS_STATUS("selfup net start");
 
-	work->start();
-	work->join();
+	SelfupWork2::runOneshot(repopath, refname_selfup, node, service);
 
 	NS_STATUS("selfup net end");
 
-	if (! ext->m_update_have)
-		return false;
+	if (! g_selfup_selfupdate_skip_fileops)
+		if (selfup_selfcheck_isoutdated(repopath, refname_selfup, cur_exe_filename)) {
+			NS_STATUS("selfup reexec");
+			selfup_selfoverwrite_and_reexec(repopath, refname_selfup, cur_exe_filename);
+			return;
+		}
 
-	if (g_selfup_selfupdate_skip_fileops)
-		return false;
+	NS_STATUS("mainup net start");
 
-	NS_STATUS("selfup filesys start");
+	SelfupWork2::runOneshot(repopath, refname_mainup, node, service);
 
-	std::string temp_filename = ns_filesys::build_modified_filename(
-		cur_exe_filename, "", ".exe", "_helper", ".exe");
-	std::string old_filename = ns_filesys::build_modified_filename(
-		cur_exe_filename, "", ".exe", "_helper_old", ".exe");
+	NS_STATUS("mainup net end");
 
-	NS_STATUS("selfup filesys write");
-
-	std::string update_buffer = selfup_checkout_memory(repopath, refname);
-
-	ns_filesys::file_write_frombuffer(temp_filename, update_buffer.data(), update_buffer.size());
-
-	NS_STATUS("selfup filesys dryrun");
-
-	selfup_dryrun(temp_filename);
-
-	NS_STATUS("selfup filesys rename");
-
-	ns_filesys::rename_file_file(cur_exe_filename, old_filename);
-	ns_filesys::rename_file_file(temp_filename, cur_exe_filename);
-
-	NS_STATUS("selfup filesys reexec");
-
-	selfup_reexec(cur_exe_filename);
-
-	NS_STATUS("selfup filesys end");
-
-	return true;
-}
-
-void toplevel(const char *node, const char *service)
-{
-	NS_STATUS("startup");
-
-	NS_STATUS(NS_GITVER);
-
-	if (! selfup_start_crank(node, service))
-		selfup_start_mainupdate_crank(node, service);
-
-	NS_STATUS("shutdown");
+	selfup_checkout(repopath, refname_mainup, checkoutpath);
+	selfup_mainexec(main_exe_filename);
 }
 
 void global_initialization()
@@ -512,7 +503,12 @@ int main(int argc, char **argv)
 
 	g_gui_ctx->start();
 
+	NS_STATUS("startup");
+	NS_STATUS(NS_GITVER);
+
 	NS_TOPLEVEL_CATCH_SELFUP(ret, toplevel, g_conf->get("serv_conn_addr").c_str(), g_conf->get("serv_port").c_str());
+
+	NS_STATUS("shutdown");
 
 	g_gui_ctx->stopRequest();
 	g_gui_ctx->join();

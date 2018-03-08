@@ -193,3 +193,17 @@ git_oid selfup_git_reference_name_to_id(git_repository *repo, const std::string 
 		throw std::runtime_error("refname id");
 	return oid;
 }
+
+git_oid selfup_git_reference_get_tree_or_default_zero(git_repository *repo, const std::string &refname)
+{
+	try {
+		git_oid oid_head(selfup_git_reference_name_to_id(repo, refname));
+		unique_ptr_gitcommit commit_head(selfup_git_commit_lookup(repo, &oid_head));
+		unique_ptr_gittree   commit_tree(selfup_git_commit_tree(commit_head.get()));
+		return *git_tree_id(commit_tree.get());
+	}
+	catch (const std::exception &e) {
+		git_oid oid_zero = {};
+		return oid_zero;
+	}
+}
