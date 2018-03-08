@@ -474,7 +474,7 @@ Address tcpthreaded_socket_peer_helper(int fd)
 
 unique_ptr_fd tcpthreaded_socket_listen_helper(const char *node, const char *service)
 {
-	unique_ptr_addrinfo res(do_getaddrinfo_tcp_listen(node, service))
+	unique_ptr_addrinfo res(do_getaddrinfo_tcp_listen(node, service));
 
 	for (addrinfo *r = res.get(); r != NULL; r = r->ai_next) {
 		unique_ptr_fd sock(new int(socket(r->ai_family, r->ai_socktype, r->ai_protocol)), TCPSocket::deleteFd);
