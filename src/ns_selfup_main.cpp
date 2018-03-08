@@ -63,7 +63,7 @@ public:
 	void virtualThreadFunc() override
 	{
 		git_oid oid_zero = {};
-		unique_ptr_gitrepository repo(selfup_git_repository_open(m_ext->m_repopath), deleteGitrepository);
+		unique_ptr_gitrepository repo(selfup_git_repository_open(m_ext->m_repopath));
 
 		/* request latest version git_oid */
 
@@ -140,8 +140,8 @@ public:
 		std::deque<git_oid> missing_blob_oids;
 
 		for (size_t i = 0; i < res_treelist_treevec.size(); i++) {
-			unique_ptr_gitodb odb(selfup_git_repository_odb(repo.get()), deleteGitodb);
-			unique_ptr_gittree tree(selfup_git_tree_lookup(repo.get(), &res_treelist_treevec[i]), deleteGittree);
+			unique_ptr_gitodb odb(selfup_git_repository_odb(repo.get()));
+			unique_ptr_gittree tree(selfup_git_tree_lookup(repo.get(), &res_treelist_treevec[i]));
 			for (size_t j = 0; j < git_tree_entrycount(tree.get()); j++) {
 				const git_tree_entry *entry = git_tree_entry_byindex(tree.get(), j);
 				if (git_tree_entry_type(entry) == GIT_OBJ_TREE) {
@@ -172,7 +172,7 @@ public:
 		NS_STATUS("mainup net commit and setref");
 
 		git_oid new_commit_oid = writeCommitDummy(repo.get(), res_latest_oid);
-		unique_ptr_gitreference new_ref(selfup_git_reference_create_and_force_set(repo.get(), m_ext->m_refname, new_commit_oid), deleteGitreference);
+		unique_ptr_gitreference new_ref(selfup_git_reference_create_and_force_set(repo.get(), m_ext->m_refname, new_commit_oid));
 
 		m_ext->confirmUpdate();
 	}
@@ -181,8 +181,8 @@ public:
 	{
 		try {
 			git_oid oid_head(selfup_git_reference_name_to_id(repo, refname));
-			unique_ptr_gitcommit commit_head(selfup_git_commit_lookup(repo, &oid_head), deleteGitcommit);
-			unique_ptr_gittree   commit_tree(selfup_git_commit_tree(commit_head.get()), deleteGittree);
+			unique_ptr_gitcommit commit_head(selfup_git_commit_lookup(repo, &oid_head));
+			unique_ptr_gittree   commit_tree(selfup_git_commit_tree(commit_head.get()));
 			return *git_tree_id(commit_tree.get());
 		}
 		catch (const std::exception &e) {
@@ -193,9 +193,9 @@ public:
 
 	git_oid writeCommitDummy(git_repository *repo, git_oid tree_oid)
 	{
-		unique_ptr_gitodb odb(selfup_git_repository_odb(repo), deleteGitodb);
-		unique_ptr_gittree tree(selfup_git_tree_lookup(repo, &tree_oid), deleteGittree);
-		unique_ptr_gitsignature sig(selfup_git_signature_new_dummy(), deleteGitsignature);
+		unique_ptr_gitodb odb(selfup_git_repository_odb(repo));
+		unique_ptr_gittree tree(selfup_git_tree_lookup(repo, &tree_oid));
+		unique_ptr_gitsignature sig(selfup_git_signature_new_dummy());
 
 		git_buf buf = {};
 		git_oid commit_oid_pre = {};
@@ -251,7 +251,7 @@ public:
 	std::vector<git_oid> recvAndWriteObjsUntilDone(git_repository *repo, size_t gui_missing_initial_size, size_t *gui_received_count)
 	{
 		std::vector<git_oid> received_blob_oids;
-		unique_ptr_gitodb odb(selfup_git_repository_odb(repo), deleteGitodb);
+		unique_ptr_gitodb odb(selfup_git_repository_odb(repo));
 		while (true) {
 			NetworkPacket res_blobs = m_respond->waitFrame();
 			uint8_t res_blobs_cmd = res_blobs.readGetCmd();
@@ -310,14 +310,14 @@ void selfup_checkout(std::string repopath, std::string refname, std::string chec
 
 	NS_STATUS("mainup checkout ref and tree");
 
-	unique_ptr_gitrepository repo(selfup_git_repository_open(repopath), deleteGitrepository);
+	unique_ptr_gitrepository repo(selfup_git_repository_open(repopath));
 
 	{
 		RefKill rki(repo.get(), refname);
 
 		git_oid commit_head_oid(selfup_git_reference_name_to_id(repo.get(), refname));
-		unique_ptr_gitcommit commit_head(selfup_git_commit_lookup(repo.get(), &commit_head_oid), deleteGitcommit);
-		unique_ptr_gittree   commit_tree(selfup_git_commit_tree(commit_head.get()), deleteGittree);
+		unique_ptr_gitcommit commit_head(selfup_git_commit_lookup(repo.get(), &commit_head_oid));
+		unique_ptr_gittree   commit_tree(selfup_git_commit_tree(commit_head.get()));
 
 		NS_STATUS("mainup checkout tree");
 
@@ -336,17 +336,17 @@ void selfup_checkout(std::string repopath, std::string refname, std::string chec
 
 std::string selfup_checkout_memory(std::string repopath, std::string refname)
 {
-	unique_ptr_gitrepository repo(selfup_git_repository_open(repopath), deleteGitrepository);
+	unique_ptr_gitrepository repo(selfup_git_repository_open(repopath));
 
 	{
 		RefKill rki(repo.get(), refname);
 
 		git_oid commit_head_oid(selfup_git_reference_name_to_id(repo.get(), refname));
-		unique_ptr_gitcommit commit_head(selfup_git_commit_lookup(repo.get(), &commit_head_oid), deleteGitcommit);
-		unique_ptr_gittree   commit_tree(selfup_git_commit_tree(commit_head.get()), deleteGittree);
+		unique_ptr_gitcommit commit_head(selfup_git_commit_lookup(repo.get(), &commit_head_oid));
+		unique_ptr_gittree   commit_tree(selfup_git_commit_tree(commit_head.get()));
 
 		const git_tree_entry *entry = git_tree_entry_byname(commit_tree.get(), SELFUP_SELFUPDATE_BLOB_ENTRY_FILENAME);
-		unique_ptr_gitblob blob(selfup_git_blob_lookup(repo.get(), git_tree_entry_id(entry)), deleteGitblob);
+		unique_ptr_gitblob blob(selfup_git_blob_lookup(repo.get(), git_tree_entry_id(entry)));
 		std::string update_buffer((char *)git_blob_rawcontent(blob.get()), (size_t)git_blob_rawsize(blob.get()));
 		return update_buffer;
 	}
@@ -374,7 +374,7 @@ unique_ptr_gitrepository selfup_ensure_repository(const std::string &repopath, c
 	int err = git_repository_init_ext(&repo, repopath.c_str(), &init_options);
 	if (!!err && err == GIT_EEXISTS) {
 		assert(!repo);
-		return unique_ptr_gitrepository(selfup_git_repository_open(repopath.c_str()), deleteGitrepository);
+		return unique_ptr_gitrepository(selfup_git_repository_open(repopath.c_str()));
 	}
 	if (!!err)
 		throw std::runtime_error("ensure repository init");

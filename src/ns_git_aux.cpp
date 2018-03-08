@@ -3,8 +3,6 @@
 #include <stdexcept>
 
 #include <git2.h>
-#include <git2/sys/repository.h>  /* git_repository_new (no backends so custom may be added) */
-#include <git2/sys/mempack.h>     /* in-memory backend */
 
 #include <selfup/ns_git_aux.h>
 
@@ -31,7 +29,7 @@ RefKill::~RefKill()
 	if (std::uncaught_exception()) {
 		try {
 			unique_ptr_gitcommit dummy_commit(selfup_git_commit_dummy_ensure(m_repo));
-			unique_ptr_gitreference ref(selfup_git_reference_create_and_force_set(m_repo, m_refname.c_str(), *git_commit_id(dummy_commit.get())), deleteGitreference);
+			unique_ptr_gitreference ref(selfup_git_reference_create_and_force_set(m_repo, m_refname.c_str(), *git_commit_id(dummy_commit.get())));
 		}
 		catch (const std::exception &e) {
 			/* suppress */
@@ -87,38 +85,38 @@ void deleteGitreference(git_reference * p)
 		git_reference_free(p);
 }
 
-git_blob * selfup_git_blob_lookup(git_repository * repository, const git_oid * oid)
+unique_ptr_gitblob selfup_git_blob_lookup(git_repository * repository, const git_oid * oid)
 {
 	git_blob *p = NULL;
 	if (!! git_blob_lookup(&p, repository, oid))
 		throw std::runtime_error("blob lookup");
-	return p;
+	return unique_ptr_gitblob(p, deleteGitblob);
 }
 
-git_commit * selfup_git_commit_lookup(git_repository * repository, const git_oid * oid)
+unique_ptr_gitcommit selfup_git_commit_lookup(git_repository * repository, const git_oid * oid)
 {
 	// FIXME: not sure if GIT_ENOTFOUND return counts as official API for git_commit_lookup
 	//        but may be useful as optional extra failure information ?
 	git_commit *p = NULL;
 	if (!! git_commit_lookup(&p, repository, oid))
 		throw std::runtime_error("commit lookup");
-	return p;
+	return unique_ptr_gitcommit(p, deleteGitcommit);
 }
 
-git_tree * selfup_git_tree_lookup(git_repository * repository, const git_oid * oid)
+unique_ptr_gittree selfup_git_tree_lookup(git_repository * repository, const git_oid * oid)
 {
 	git_tree *p = NULL;
 	if (!! git_tree_lookup(&p, repository, oid))
 		throw std::runtime_error("tree lookup");
-	return p;
+	return unique_ptr_gittree(p, deleteGittree);
 }
 
-git_tree * selfup_git_commit_tree(git_commit * commit)
+unique_ptr_gittree selfup_git_commit_tree(git_commit * commit)
 {
 	git_tree *p = NULL;
 	if (!! git_commit_tree(&p, commit))
 		throw std::runtime_error("commit tree");
-	return p;
+	return unique_ptr_gittree(p, deleteGittree);
 }
 
 unique_ptr_gitcommit selfup_git_commit_dummy_ensure(git_repository *repo)
@@ -128,92 +126,64 @@ unique_ptr_gitcommit selfup_git_commit_dummy_ensure(git_repository *repo)
 	git_oid commit_oid = {};
 	if (!! git_blob_create_frombuffer(&blob_oid, repo, "dummyblob", 9))
 		throw std::runtime_error("blob create frombuffer");
-	unique_ptr_gittreebuilder treebld(selfup_git_treebuilder_new(repo), deleteGittreebuilder);
+	unique_ptr_gittreebuilder treebld(selfup_git_treebuilder_new(repo));
 	if (!! git_treebuilder_insert(NULL, treebld.get(), "dummyfile", &blob_oid, GIT_FILEMODE_BLOB))
 		throw std::runtime_error("treebuilder insert");
 	if (!! git_treebuilder_write(&tree_oid, treebld.get()))
 		throw std::runtime_error("treebuilder write");
-	unique_ptr_gittree tree(selfup_git_tree_lookup(repo, &tree_oid), deleteGittree);
-	unique_ptr_gitsignature sig(selfup_git_signature_new_dummy(), deleteGitsignature);
+	unique_ptr_gittree tree(selfup_git_tree_lookup(repo, &tree_oid));
+	unique_ptr_gitsignature sig(selfup_git_signature_new_dummy());
 	if (!! git_commit_create(&commit_oid, repo, NULL, sig.get(), sig.get(), "UTF-8", "Dummy", tree.get(), 0, NULL))
 		throw std::runtime_error("commit create");
-	unique_ptr_gitcommit commit(selfup_git_commit_lookup(repo, &commit_oid), deleteGitcommit);
+	unique_ptr_gitcommit commit(selfup_git_commit_lookup(repo, &commit_oid));
 	return commit;
 }
 
-git_repository * selfup_git_repository_new()
-{
-	/* https://github.com/libgit2/libgit2/blob/master/include/git2/sys/repository.h */
-	git_repository *p = NULL;
-	if (!! git_repository_new(&p))
-		throw std::runtime_error("repository new");
-	return p;
-}
-
-git_repository * selfup_git_repository_open(std::string path)
+unique_ptr_gitrepository selfup_git_repository_open(std::string path)
 {
 	git_repository *p = NULL;
 	if (!! git_repository_open(&p, path.c_str()))
 		throw std::runtime_error("repository new");
-	return p;
+	return unique_ptr_gitrepository(p, deleteGitrepository);
 }
 
-git_repository * selfup_git_memory_repository_new()
-{
-	int r = 0;
-
-	unique_ptr_gitrepository repository_memory(selfup_git_repository_new(), deleteGitrepository);
-	unique_ptr_gitodb repository_odb(selfup_git_repository_odb(repository_memory.get()), deleteGitodb);
-
-	/* NOTE: backend is owned by odb, and odb is owned by repository.
-	backend thus destroyed indirectly with the repository. */
-	git_odb_backend *backend_memory = NULL;
-	/* https://github.com/libgit2/libgit2/blob/master/include/git2/sys/mempack.h */
-	if (!!(r = git_mempack_new(&backend_memory)))
-		throw std::runtime_error("mempack");
-	if (!!(r = git_odb_add_backend(repository_odb.get(), backend_memory, 999)))
-		throw std::runtime_error("backend");
-
-	return repository_memory.release();
-}
-
-git_odb * selfup_git_repository_odb(git_repository * repository)
+unique_ptr_gitodb selfup_git_repository_odb(git_repository * repository)
 {
 	git_odb *p = NULL;
 	if (!! git_repository_odb(&p, repository))
 		throw std::runtime_error("repository odb");
-	return p;
+	return unique_ptr_gitodb(p, deleteGitodb);
 }
 
 bool selfup_git_exists(git_repository * repository, git_oid * oid)
 {
-	unique_ptr_gitodb odb(selfup_git_repository_odb(repository), deleteGitodb);
+	unique_ptr_gitodb odb(selfup_git_repository_odb(repository));
 	return !! git_odb_exists(odb.get(), oid);
 }
 
-git_treebuilder * selfup_git_treebuilder_new(git_repository * repository)
+unique_ptr_gittreebuilder selfup_git_treebuilder_new(git_repository * repository)
 {
 	git_treebuilder *p = NULL;
 	if (!! git_treebuilder_new(&p, repository, NULL))
 		throw std::runtime_error("treebuilder new");
-	return p;
+	return unique_ptr_gittreebuilder(p, deleteGittreebuilder);
 }
 
 
-git_signature * selfup_git_signature_new_dummy()
+unique_ptr_gitsignature selfup_git_signature_new_dummy()
 {
 	git_signature *sig = NULL;
 	if (!! git_signature_new(&sig, "DummyName", "DummyEMail", 0, 0))
 		throw std::runtime_error("signature");
-	return sig;
+	return unique_ptr_gitsignature(sig, deleteGitsignature);
 }
 
-git_reference * selfup_git_reference_create_and_force_set(git_repository * repo, const std::string & refname, git_oid commit_oid)
+unique_ptr_gitreference selfup_git_reference_create_and_force_set(git_repository * repo, const std::string & refname, git_oid commit_oid)
 {
 	git_reference *ref = NULL;
 	if (!! git_reference_create(&ref, repo, refname.c_str(), &commit_oid, true, "DummyLogMessage"))
 		throw std::runtime_error("reference");
-	return ref;
+	return unique_ptr_gitreference(ref, deleteGitreference);
 }
 
 git_oid selfup_git_reference_name_to_id(git_repository *repo, const std::string &refname)

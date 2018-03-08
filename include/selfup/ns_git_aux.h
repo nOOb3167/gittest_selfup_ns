@@ -40,26 +40,24 @@ void deleteGitodb(git_odb *p);
 void deleteGitsignature(git_signature *p);
 void deleteGitreference(git_reference *p);
 
-git_blob *   selfup_git_blob_lookup(git_repository *repository, const git_oid *oid);
-git_commit * selfup_git_commit_lookup(git_repository *repository, const git_oid *oid);
-git_tree *   selfup_git_tree_lookup(git_repository *repository, const git_oid *oid);
+unique_ptr_gitblob   selfup_git_blob_lookup(git_repository *repository, const git_oid *oid);
+unique_ptr_gitcommit selfup_git_commit_lookup(git_repository * repository, const git_oid * oid);
+unique_ptr_gittree selfup_git_tree_lookup(git_repository * repository, const git_oid * oid);
 
-git_tree *   selfup_git_commit_tree(git_commit *commit);
+unique_ptr_gittree   selfup_git_commit_tree(git_commit *commit);
 unique_ptr_gitcommit selfup_git_commit_dummy_ensure(git_repository *repo);
 
-git_repository * selfup_git_repository_new();
-git_repository * selfup_git_repository_open(std::string path);
-git_repository * selfup_git_memory_repository_new();
+unique_ptr_gitrepository selfup_git_repository_open(std::string path);
 
-git_odb * selfup_git_repository_odb(git_repository *repository);
+unique_ptr_gitodb selfup_git_repository_odb(git_repository *repository);
 
 bool selfup_git_exists(git_repository * repository, git_oid * oid);
 
-git_treebuilder * selfup_git_treebuilder_new(git_repository * repository);
+unique_ptr_gittreebuilder selfup_git_treebuilder_new(git_repository * repository);
 
-git_signature * selfup_git_signature_new_dummy();
+unique_ptr_gitsignature selfup_git_signature_new_dummy();
 
-git_reference * selfup_git_reference_create_and_force_set(git_repository *repo, const std::string &refname, git_oid commit_oid);
+unique_ptr_gitreference selfup_git_reference_create_and_force_set(git_repository *repo, const std::string &refname, git_oid commit_oid);
 git_oid         selfup_git_reference_name_to_id(git_repository *repo, const std::string &refname);
 
 
