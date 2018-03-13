@@ -435,8 +435,11 @@ void toplevel(const char *node, const char *service)
 	std::string repopath = ns_filesys::current_executable_relative_filename("clnt_repo/.git");
 	std::string refname_selfup = "refs/heads/selfup";
 	std::string refname_mainup = "refs/heads/mainup";
-	std::string checkoutpath = ns_filesys::current_executable_relative_filename("clnt_chkout");
-	std::string main_exe_filename = ns_filesys::path_append_abs_rel(checkoutpath, "bin/minetest.exe");
+	std::string refname_stage2 = "refs/heads/stage2";
+	std::string chkoutpath_mainup = ns_filesys::current_executable_relative_filename("clnt_chkout");
+	std::string chkoutpath_stage2 = ns_filesys::current_executable_relative_filename("stage2_chkout");
+	std::string filename_mainup_exe = ns_filesys::path_append_abs_rel(chkoutpath_mainup, "bin/minetest.exe");
+	std::string filename_stage2_exe = ns_filesys::path_append_abs_rel(chkoutpath_stage2, "bin/cefwtf.exe");
 
 	selfup_ensure_repository(repopath, ".git");
 
@@ -459,8 +462,17 @@ void toplevel(const char *node, const char *service)
 
 	NS_STATUS("mainup net end");
 
-	selfup_checkout(repopath, refname_mainup, checkoutpath);
-	selfup_mainexec(main_exe_filename);
+	NS_STATUS("stage2 net start");
+
+	SelfupWork2::runOneshot(repopath, refname_stage2, node, service);
+
+	NS_STATUS("stage2 net end");
+
+	selfup_checkout(repopath, refname_mainup, chkoutpath_mainup);
+	selfup_checkout(repopath, refname_stage2, chkoutpath_stage2);
+
+	//selfup_mainexec(filename_mainup_exe);
+	selfup_mainexec(filename_stage2_exe);
 }
 
 void global_initialization()
