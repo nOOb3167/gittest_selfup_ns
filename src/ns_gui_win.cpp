@@ -8,6 +8,7 @@
 #include <random>
 
 #include <windows.h>
+#include <windowsx.h>
 #include <wingdi.h>
 
 #include <ns_version.h>
@@ -347,6 +348,15 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam)
 			NS_GUI_LOG_ERR("WM_PAINT");
 		}
 		EndPaint(hwnd, &ps);
+	}
+	break;
+
+	case WM_LBUTTONDOWN:
+	case WM_LBUTTONUP:
+	{
+		bool down = wparam & MK_LBUTTON;
+		int x = GET_X_LPARAM(lparam);
+		int y = GET_Y_LPARAM(lparam);
 	}
 	break;
 
