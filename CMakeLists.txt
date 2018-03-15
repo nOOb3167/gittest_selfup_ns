@@ -57,6 +57,7 @@ SET(COMMON_NS_HEADERS
 
 SET(COMMON_NS_SOURCES
 	src/ns_git_shims.cpp
+	src/TCPAddress.cpp
 	src/TCPSocket.cpp
 )
 
@@ -87,8 +88,6 @@ SET(SELFUP_NS_SOURCES
 	src/ns_thread.cpp
 	src/ns_selfup_main.cpp
 	src/ns_selfup_ex.cpp
-	src/TCPAddress.cpp
-	src/TCPAsync.cpp
 )
 
 SET(SERV_NS_HEADERS

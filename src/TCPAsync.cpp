@@ -185,14 +185,3 @@ void TCPThreaded::threadFunc2(const std::shared_ptr<ThreadCtx>& ctx)
 		}
 	}
 }
-
-void TCPLogDump::dump(addrinfo *addr, uint32_t magic, const char * data, size_t data_len)
-{
-	NetworkPacket packet(SELFUP_CMD_LOGDUMP, networkpacket_cmd_tag_t());
-	packet << magic;
-	packet << (uint32_t)data_len;
-	packet.outSizedStr(data, data_len);
-
-	unique_ptr_fd sock(tcpsocket_socket_connecting_helper_gai(addr));
-	tcpsocket_blocking_write_helper(*sock, &packet, 0);
-}

@@ -2,13 +2,25 @@
 #include <cstdlib>
 
 #include <selfup/ns_crash.h>
+#include <selfup/ns_helpers.h>
 #include <selfup/ns_log.h>
 #include <selfup/TCPAddress.h>
-#include <selfup/TCPAsync.h>
+#include <selfup/TCPSocket.h>
 
 int g_crash_mbox = 0;
 uint32_t g_crash_magic = 0x00000000;
 unique_ptr_addrinfo g_crash_addrinfo(NULL, delete_addrinfo);
+
+void TCPLogDump::dump(addrinfo *addr, uint32_t magic, const char * data, size_t data_len)
+{
+	NetworkPacket packet(SELFUP_CMD_LOGDUMP, networkpacket_cmd_tag_t());
+	packet << magic;
+	packet << (uint32_t)data_len;
+	packet.outSizedStr(data, data_len);
+
+	unique_ptr_fd sock(tcpsocket_socket_connecting_helper_gai(addr));
+	tcpsocket_blocking_write_helper(*sock, &packet, 0);
+}
 
 #ifdef _WIN32
 

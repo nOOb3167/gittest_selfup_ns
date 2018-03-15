@@ -92,10 +92,4 @@ private:
 	std::deque<unique_ptr_fd> m_queue_incoming;
 };
 
-class TCPLogDump
-{
-public:
-	static void dump(addrinfo *addr, uint32_t magic, const char * data, size_t data_len);
-};
-
 #endif /* _TCPASYNC_H_ */
