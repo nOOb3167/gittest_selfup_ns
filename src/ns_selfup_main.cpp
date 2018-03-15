@@ -181,7 +181,7 @@ public:
 		NS_STATUS("mainup net commit and setref");
 
 		git_oid new_commit_oid = writeCommitDummy(repo.get(), res_latest_oid);
-		unique_ptr_gitreference new_ref(selfup_git_reference_create_and_force_set(repo.get(), m_ext->m_refname, new_commit_oid));
+		unique_ptr_gitreference new_ref(selfup_git_reference_create_and_force_set(repo.get(), m_ext->m_refname, &new_commit_oid));
 
 		m_ext->confirmUpdate();
 	}

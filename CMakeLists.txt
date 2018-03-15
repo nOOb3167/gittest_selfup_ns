@@ -54,6 +54,10 @@ SET(COMMON_NS_HEADERS
 	include/selfup/TCPAsync.h
 )
 
+SET(COMMON_NS_SOURCES
+	src/ns_git_shims.cpp
+)
+
 SET(SELFUP_NS_HEADERS
 	${COMMON_NS_HEADERS}
 	include/selfup/ns_git_aux.h
@@ -66,6 +70,7 @@ SET(SELFUP_NS_HEADERS
 	${CMAKE_BINARY_DIR}/ns_conf_builtin.h
 )
 SET(SELFUP_NS_SOURCES
+	${COMMON_NS_SOURCES}
 	src/NetworkPacket.cpp
 	src/ns_conf.cpp
 	src/ns_crash.cpp
@@ -79,6 +84,7 @@ SET(SELFUP_NS_SOURCES
 	src/ns_systemd.cpp
 	src/ns_thread.cpp
 	src/ns_selfup_main.cpp
+	src/ns_selfup_ex.cpp
 	src/TCPAddress.cpp
 	src/TCPAsync.cpp
 )
@@ -88,6 +94,7 @@ SET(SERV_NS_HEADERS
 	${CMAKE_BINARY_DIR}/ns_conf_builtin.h
 )
 SET(SERV_NS_SOURCES
+	${COMMON_NS_SOURCES}
 	src/NetworkPacket.cpp
 	src/ns_conf.cpp
 	src/ns_crash.cpp

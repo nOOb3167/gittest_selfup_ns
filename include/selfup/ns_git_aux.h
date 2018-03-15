@@ -2,6 +2,7 @@
 #define _NS_GIT_AUX_
 
 #include <memory>
+#include <string>
 
 #include <git2.h>
 
@@ -40,13 +41,18 @@ void deleteGitodb(git_odb *p);
 void deleteGitsignature(git_signature *p);
 void deleteGitreference(git_reference *p);
 
+git_oid selfup_git_oid_from(const char *s, size_t l);
+git_oid selfup_git_blob_from(git_repository * repo, const char *s, size_t l);
+
 unique_ptr_gitblob   selfup_git_blob_lookup(git_repository *repository, const git_oid *oid);
 unique_ptr_gitcommit selfup_git_commit_lookup(git_repository * repository, const git_oid * oid);
 unique_ptr_gittree selfup_git_tree_lookup(git_repository * repository, const git_oid * oid);
 
 unique_ptr_gittree   selfup_git_commit_tree(git_commit *commit);
 unique_ptr_gitcommit selfup_git_commit_dummy_ensure(git_repository *repo);
+unique_ptr_gitcommit selfup_git_commit_write_from_tree(git_repository *repo, git_oid tree_oid);
 
+unique_ptr_gitrepository selfup_git_repository_ensure(const std::string &repopath, const std::string &sanity_check_lump);
 unique_ptr_gitrepository selfup_git_repository_open(std::string path);
 
 unique_ptr_gitodb selfup_git_repository_odb(git_repository *repository);
@@ -57,9 +63,15 @@ unique_ptr_gittreebuilder selfup_git_treebuilder_new(git_repository * repository
 
 unique_ptr_gitsignature selfup_git_signature_new_dummy();
 
-unique_ptr_gitreference selfup_git_reference_create_and_force_set(git_repository *repo, const std::string &refname, git_oid commit_oid);
+unique_ptr_gitreference selfup_git_reference_create_and_force_set(git_repository *repo, const std::string &refname, const git_oid * commit_oid);
 git_oid         selfup_git_reference_name_to_id(git_repository *repo, const std::string &refname);
 
 git_oid selfup_git_reference_get_tree_or_default_zero(git_repository *repo, const std::string &refname);
+
+std::string selfup_git_checkout_memory(const std::string &repopath, const std::string &refname, const std::string &tree_entry_blob_filename);
+
+bool selfup_git_check_isoutdated(const std::string &repopath, const std::string &refname, const std::string &cur_exe_filename, const std::string &tree_entry_blob_filename);
+
+void selfup_git_checkout(const std::string &repopath, const std::string &refname, const std::string &checkoutpath);
 
 #endif /* _NS_GIT_AUX_ */
