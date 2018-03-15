@@ -35,7 +35,6 @@ public:
 protected:
 	bool doUpdate()
 	{
-		git_oid oid_zero = {};
 		unique_ptr_gitrepository repo(selfup_git_repository_open(m_repopath));
 
 		/* request latest version git_oid */
