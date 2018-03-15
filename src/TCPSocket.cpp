@@ -1,6 +1,6 @@
 #include <selfup/TCPSocket.h>
 
-int g_tcpasync_disable_timeout = 0;
+int g_tcpsocket_disable_timeout = 0;
 
 TCPSocket::TCPSocket(const char *node, const char *service, tcpsocket_connect_tag_t) :
 	m_handle(tcpsocket_socket_connecting_helper(node, service))
@@ -106,8 +106,8 @@ unique_ptr_fd tcpsocket_socket_accept_helper(int fd)
 	unique_ptr_fd nsock(new int(accept(fd, (struct sockaddr *) &sockaddr, &socklen)), TCPSocket::deleteFd);
 	if (*nsock < 0)
 		throw std::runtime_error("accept");
-	if (! g_tcpasync_disable_timeout) {
-		int val = TCPASYNC_ACCEPT_RCVTIMEO_MSEC;
+	if (! g_tcpsocket_disable_timeout) {
+		int val = TCPSOCKET_ACCEPT_RCVTIMEO_MSEC;
 		if (setsockopt(*nsock, SOL_SOCKET, SO_RCVTIMEO, (char *) &val, sizeof val) < 0)
 			throw std::runtime_error("setsockopt");
 	}
@@ -128,7 +128,7 @@ NetworkPacket tcpsocket_blocking_read_helper(int fd)
 		throw ProtocolExc("frame magic");
 	const uint32_t sz = (hdr[5] << 24) | (hdr[6] << 16) | (hdr[7] << 8) | (hdr[8] << 0);
 
-	if (sz > TCPASYNC_FRAME_SIZE_MAX)
+	if (sz > TCPSOCKET_FRAME_SIZE_MAX)
 		throw std::runtime_error("frame size");
 
 	/* read packet */
@@ -222,7 +222,7 @@ void tcpsocket_aux_recv(int fd, char *buf, int len)
 		while ((rcvt = recv(fd, (char *) buf + off, len - off, 0)) < 0)
 		{
 			/* SO_RCVTIMEO can cause errno EAGAIN or EWOULDBLOCK */
-			if (g_tcpasync_disable_timeout && (errno == EAGAIN || errno == EWOULDBLOCK))
+			if (g_tcpsocket_disable_timeout && (errno == EAGAIN || errno == EWOULDBLOCK))
 				continue;
 			if (errno == EINTR)
 				continue;
@@ -305,10 +305,10 @@ unique_ptr_fd tcpsocket_socket_accept_helper(int fd)
 		throw std::runtime_error("accept");
 	}
 	unique_ptr_fd nsock(new int(ret), TCPSocket::deleteFd);
-	if (! g_tcpasync_disable_timeout) {
+	if (! g_tcpsocket_disable_timeout) {
 		struct timeval val = {};
-		val.tv_sec = TCPASYNC_ACCEPT_RCVTIMEO_MSEC / 1000;
-		val.tv_usec = (TCPASYNC_ACCEPT_RCVTIMEO_MSEC % 1000) * 1000;
+		val.tv_sec = TCPSOCKET_ACCEPT_RCVTIMEO_MSEC / 1000;
+		val.tv_usec = (TCPSOCKET_ACCEPT_RCVTIMEO_MSEC % 1000) * 1000;
 		if (setsockopt(*nsock, SOL_SOCKET, SO_RCVTIMEO, (char *) &val, sizeof val) < 0)
 			throw std::runtime_error("setsockopt");
 	}
@@ -331,7 +331,7 @@ NetworkPacket tcpsocket_blocking_read_helper(int fd)
 		throw ProtocolExc("frame magic");
 	const uint32_t sz = (hdr[5] << 24) | (hdr[6] << 16) | (hdr[7] << 8) | (hdr[8] << 0);
 
-	if (sz > TCPASYNC_FRAME_SIZE_MAX)
+	if (sz > TCPSOCKET_FRAME_SIZE_MAX)
 		throw std::runtime_error("frame size");
 
 	/* read packet */

@@ -493,7 +493,7 @@ void global_initialization()
 	/* global config */
 
 	g_crash_mbox = g_conf->getDec("crash_mbox");
-	g_tcpasync_disable_timeout = g_conf->getDec("tcpasync_disable_timeout");
+	g_tcpsocket_disable_timeout = g_conf->getDec("tcpasync_disable_timeout");
 	g_selfup_selfupdate_skip_fileops = g_conf->getDec("selfupdate_skip_fileops");
 
 	/* more init */

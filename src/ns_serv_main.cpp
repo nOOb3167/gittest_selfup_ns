@@ -220,7 +220,7 @@ int main(int argc, char **argv)
 	ns_log::NsLog::initGlobal();
 
 	g_crash_mbox = g_conf->getDec("crash_mbox");
-	g_tcpasync_disable_timeout = g_conf->getDec("tcpasync_disable_timeout");
+	g_tcpsocket_disable_timeout = g_conf->getDec("tcpasync_disable_timeout");
 	g_servup_thread_num = g_conf->getDec("servup_thread_num");
 
 	std::string service = g_conf->get("serv_port");

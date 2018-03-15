@@ -7,9 +7,8 @@
 #include <selfup/NetworkPacket.h>
 #include <selfup/TCPAddress.h>
 
-#define TCPASYNC_FRAME_SIZE_MAX (256 * 1024 * 1024)
-#define TCPASYNC_SENDFILE_COUNT_PARAM 524288
-#define TCPASYNC_ACCEPT_RCVTIMEO_MSEC 30000
+#define TCPSOCKET_FRAME_SIZE_MAX (256 * 1024 * 1024)
+#define TCPSOCKET_ACCEPT_RCVTIMEO_MSEC 30000
 
 /* https://msdn.microsoft.com/en-us/library/windows/desktop/ms740516(v=vs.85).aspx */
 typedef ::std::unique_ptr<int, void(*)(int *fd)> unique_ptr_fd;
@@ -17,7 +16,7 @@ typedef ::std::shared_ptr<int>                   shared_ptr_fd;
 
 struct tcpsocket_connect_tag_t {};
 
-extern int g_tcpasync_disable_timeout;
+extern int g_tcpsocket_disable_timeout;
 
 class TCPSocket
 {
