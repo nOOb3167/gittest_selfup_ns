@@ -23,7 +23,7 @@
 #include <selfup/ns_helpers.h>
 #include <selfup/ns_log.h>
 #include <selfup/ns_selfup_aux.h>
-#include <selfup/TCPAsync.h>
+#include <selfup/TCPSocket.h>
 
 #define SELFUP_ARG_CHILD "--xchild"
 #define SELFUP_ARG_VERSUB "--xversub"

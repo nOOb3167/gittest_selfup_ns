@@ -11,7 +11,7 @@
 #include <selfup/ns_git_aux.h>
 #include <selfup/ns_git_shims.h>
 #include <selfup/ns_helpers.h>
-#include <selfup/TCPAsync.h>
+#include <selfup/TCPSocket.h>
 
 #define SELFUP_ARG_CHILD "--xchild"
 #define SELFUP_ARG_VERSUB "--xversub"
