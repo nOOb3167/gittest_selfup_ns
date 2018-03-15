@@ -52,10 +52,12 @@ SET(COMMON_NS_HEADERS
 	include/selfup/ns_thread.h
 	include/selfup/TCPAddress.h
 	include/selfup/TCPAsync.h
+	include/selfup/TCPSocket.h
 )
 
 SET(COMMON_NS_SOURCES
 	src/ns_git_shims.cpp
+	src/TCPSocket.cpp
 )
 
 SET(SELFUP_NS_HEADERS
