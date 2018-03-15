@@ -51,12 +51,18 @@ SET(COMMON_NS_HEADERS
 	include/selfup/ns_systemd.h
 	include/selfup/ns_thread.h
 	include/selfup/TCPAddress.h
-	include/selfup/TCPAsync.h
 	include/selfup/TCPSocket.h
 )
 
 SET(COMMON_NS_SOURCES
+	src/NetworkPacket.cpp
+	src/ns_conf.cpp
+	src/ns_crash.cpp
+	src/ns_filesys.cpp
 	src/ns_git_shims.cpp
+	src/ns_helpers.cpp
+	src/ns_log.cpp
+	src/ns_thread.cpp
 	src/TCPAddress.cpp
 	src/TCPSocket.cpp
 )
@@ -74,38 +80,24 @@ SET(SELFUP_NS_HEADERS
 )
 SET(SELFUP_NS_SOURCES
 	${COMMON_NS_SOURCES}
-	src/NetworkPacket.cpp
-	src/ns_conf.cpp
-	src/ns_crash.cpp
-	src/ns_filesys.cpp
 	src/ns_git_aux.cpp
 	src/ns_gui.cpp
 	src/ns_gui_win.cpp
-	src/ns_helpers.cpp
-	src/ns_log.cpp
 	src/ns_selfup_aux.cpp
 	src/ns_systemd.cpp
-	src/ns_thread.cpp
 	src/ns_selfup_main.cpp
 	src/ns_selfup_ex.cpp
 )
 
 SET(SERV_NS_HEADERS
 	${COMMON_NS_HEADERS}
+	include/selfup/TCPAsync.h
 	${CMAKE_BINARY_DIR}/ns_conf_builtin.h
 )
 SET(SERV_NS_SOURCES
 	${COMMON_NS_SOURCES}
-	src/NetworkPacket.cpp
-	src/ns_conf.cpp
-	src/ns_crash.cpp
-	src/ns_filesys.cpp
-	src/ns_helpers.cpp
-	src/ns_log.cpp
 	src/ns_serv_main.cpp
 	src/ns_systemd.cpp
-	src/ns_thread.cpp
-	src/TCPAddress.cpp
 	src/TCPAsync.cpp
 )
 
