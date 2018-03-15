@@ -254,6 +254,8 @@ int xmain(int argc, char **argv)
 	std::string refname_selfup = "refs/heads/selfup";
 	std::string refname_mainup = "refs/heads/mainup";
 	std::string refname_stage2 = "refs/heads/stage2";
+	std::string chkoutpath_mainup = ns_filesys::current_executable_relative_filename("clnt_chkout");
+	std::string chkoutpath_stage2 = ns_filesys::current_executable_relative_filename("stage2_chkout");
 
 	const char *node = "10.55.1.6";
 	const char *service = "6757";
@@ -267,6 +269,9 @@ int xmain(int argc, char **argv)
 
 	SelfupUpdater::updateOneshot(node, service, repopath, refname_mainup);
 	SelfupUpdater::updateOneshot(node, service, repopath, refname_stage2);
+
+	SelfupFileOps::checkout(repopath, refname_mainup, chkoutpath_mainup);
+	SelfupFileOps::checkout(repopath, refname_stage2, chkoutpath_stage2);
 
 	return EXIT_SUCCESS;
 }
