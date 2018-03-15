@@ -44,27 +44,27 @@ std::string & NsLogTlsServ::virtualGetIdent()
 }
 
 TCPSocket::TCPSocket(const char *node, const char *service, tcpsocket_connect_tag_t) :
-	m_handle(tcpthreaded_socket_connecting_helper(node, service))
+	m_handle(tcpsocket_socket_connecting_helper(node, service))
 {}
 
 void TCPSocket::Send(NetworkPacket * packet)
 {
-	tcpthreaded_blocking_write_helper(*m_handle, packet, 0);
+	tcpsocket_blocking_write_helper(*m_handle, packet, 0);
 }
 
 NetworkPacket TCPSocket::Recv()
 {
-	return tcpthreaded_blocking_read_helper(*m_handle);
+	return tcpsocket_blocking_read_helper(*m_handle);
 }
 
 void TCPSocket::deleteFd(int * fd)
 {
-	tcpthreaded_socket_close_helper(fd);
+	tcpsocket_socket_close_helper(fd);
 }
 
 void TCPSocket::deleteFdFileNotSocket(int * fd)
 {
-	tcpthreaded_file_close_helper(fd);
+	tcpsocket_file_close_helper(fd);
 }
 
 TCPThreaded::Respond::Respond(int fd) :
@@ -73,15 +73,15 @@ TCPThreaded::Respond::Respond(int fd) :
 
 void TCPThreaded::Respond::respondOneshot(NetworkPacket packet)
 {
-	tcpthreaded_blocking_write_helper(m_fd, &packet, 0);
+	tcpsocket_blocking_write_helper(m_fd, &packet, 0);
 }
 
 void TCPThreaded::Respond::respondOneshotSendfile(NetworkPacket packet, const std::string & filename)
 {
 	size_t size = 0;
-	unique_ptr_fd fdfile(tcpthreaded_file_open_size_helper(filename, &size));
-	tcpthreaded_blocking_write_helper(m_fd, &packet, size);
-	tcpthreaded_blocking_sendfile_helper(m_fd, *fdfile, size);
+	unique_ptr_fd fdfile(tcpsocket_file_open_size_helper(filename, &size));
+	tcpsocket_blocking_write_helper(m_fd, &packet, size);
+	tcpsocket_blocking_sendfile_helper(m_fd, *fdfile, size);
 }
 
 TCPThreaded::ThreadCtx::ThreadCtx(size_t thread_idx) :
@@ -91,7 +91,7 @@ TCPThreaded::ThreadCtx::ThreadCtx(size_t thread_idx) :
 
 TCPThreaded::TCPThreaded(const char *node, const char *service, size_t thread_num) :
 	m_framedispatch(),
-	m_listen(tcpthreaded_socket_listen_helper(node, service)),
+	m_listen(tcpsocket_socket_listen_helper(node, service)),
 	m_listen_thread_exc(),
 	m_listen_thread(),
 	m_thread_exc(),
@@ -155,9 +155,9 @@ void TCPThreaded::threadFuncListenLoop()
 void TCPThreaded::threadFuncListenLoop2()
 {
 	while (true) {
-		unique_ptr_fd nsock(tcpthreaded_socket_accept_helper(*m_listen));
+		unique_ptr_fd nsock(tcpsocket_socket_accept_helper(*m_listen));
 
-		Address peer = tcpthreaded_socket_peer_helper(*nsock);
+		Address peer = tcpsocket_socket_peer_helper(*nsock);
 
 		NS_SOG_PF("accept [%s]", peer.getStr().c_str());
 
@@ -194,13 +194,13 @@ void TCPThreaded::threadFunc2(const std::shared_ptr<ThreadCtx>& ctx)
 		m_queue_incoming.pop_front();
 		lock.unlock();
 
-		Address peer = tcpthreaded_socket_peer_helper(*fd);
+		Address peer = tcpsocket_socket_peer_helper(*fd);
 
 		NS_SOG_PF("connect [%s]", peer.getStr().c_str());
 
 		try {
 			while (true) {
-				NetworkPacket packet(tcpthreaded_blocking_read_helper(*fd));
+				NetworkPacket packet(tcpsocket_blocking_read_helper(*fd));
 				Respond respond(*fd);
 				m_framedispatch(&packet, &respond);
 			}
@@ -219,13 +219,13 @@ void TCPLogDump::dump(addrinfo *addr, uint32_t magic, const char * data, size_t 
 	packet << (uint32_t)data_len;
 	packet.outSizedStr(data, data_len);
 
-	unique_ptr_fd sock(tcpthreaded_socket_connecting_helper_gai(addr));
-	tcpthreaded_blocking_write_helper(*sock, &packet, 0);
+	unique_ptr_fd sock(tcpsocket_socket_connecting_helper_gai(addr));
+	tcpsocket_blocking_write_helper(*sock, &packet, 0);
 }
 
 #ifdef _WIN32
 
-void tcpthreaded_aux_recv(int fd, char *buf, int len)
+void tcpsocket_aux_recv(int fd, char *buf, int len)
 {
 	int off = 0;
 	while (off < len) {
@@ -241,7 +241,7 @@ void tcpthreaded_aux_recv(int fd, char *buf, int len)
 	}
 }
 
-void tcpthreaded_socket_close_helper(int *fd)
+void tcpsocket_socket_close_helper(int *fd)
 {
 	if (fd && *fd != INVALID_SOCKET) {
 		closesocket(*fd);
@@ -249,7 +249,7 @@ void tcpthreaded_socket_close_helper(int *fd)
 	}
 }
 
-unique_ptr_fd tcpthreaded_socket_connecting_helper_gai(addrinfo *addr)
+unique_ptr_fd tcpsocket_socket_connecting_helper_gai(addrinfo *addr)
 {
 	for (addrinfo *r = addr; r != NULL; r = r->ai_next) {
 		unique_ptr_fd sock(new int(socket(r->ai_family, r->ai_socktype, r->ai_protocol)), TCPSocket::deleteFd);
@@ -263,12 +263,12 @@ unique_ptr_fd tcpthreaded_socket_connecting_helper_gai(addrinfo *addr)
 	throw std::runtime_error("socket connecting helper");
 }
 
-unique_ptr_fd tcpthreaded_socket_connecting_helper(const char *node, const char *service)
+unique_ptr_fd tcpsocket_socket_connecting_helper(const char *node, const char *service)
 {
-	return tcpthreaded_socket_connecting_helper_gai(do_getaddrinfo_tcp(node, service).get());
+	return tcpsocket_socket_connecting_helper_gai(do_getaddrinfo_tcp(node, service).get());
 }
 
-Address tcpthreaded_socket_peer_helper(int fd)
+Address tcpsocket_socket_peer_helper(int fd)
 {
 	struct sockaddr_storage sockaddr = {};
 	int socklen = sizeof sockaddr;
@@ -278,7 +278,7 @@ Address tcpthreaded_socket_peer_helper(int fd)
 	return addr;
 }
 
-unique_ptr_fd tcpthreaded_socket_listen_helper(const char *node, const char *service)
+unique_ptr_fd tcpsocket_socket_listen_helper(const char *node, const char *service)
 {
 	unique_ptr_addrinfo res(do_getaddrinfo_tcp_listen(node, service));
 
@@ -296,7 +296,7 @@ unique_ptr_fd tcpthreaded_socket_listen_helper(const char *node, const char *ser
 	throw std::runtime_error("socket listen helper");
 }
 
-unique_ptr_fd tcpthreaded_socket_accept_helper(int fd)
+unique_ptr_fd tcpsocket_socket_accept_helper(int fd)
 {
 	struct sockaddr_storage sockaddr = {};
 	int socklen = sizeof sockaddr;
@@ -311,13 +311,13 @@ unique_ptr_fd tcpthreaded_socket_accept_helper(int fd)
 	return nsock;
 }
 
-NetworkPacket tcpthreaded_blocking_read_helper(int fd)
+NetworkPacket tcpsocket_blocking_read_helper(int fd)
 {
 	/* read header */
 
 	uint8_t hdr[9] = {};
 
-	tcpthreaded_aux_recv(fd, (char *) hdr, 9);
+	tcpsocket_aux_recv(fd, (char *) hdr, 9);
 
 	/* validate */
 
@@ -333,14 +333,14 @@ NetworkPacket tcpthreaded_blocking_read_helper(int fd)
 	std::vector<uint8_t> buf;
 	buf.resize(sz);
 
-	tcpthreaded_aux_recv(fd, (char *) buf.data(), buf.size());
+	tcpsocket_aux_recv(fd, (char *) buf.data(), buf.size());
 
 	NetworkPacket packet(std::move(buf), networkpacket_vec_steal_tag_t());
 
 	return packet;
 }
 
-void tcpthreaded_blocking_write_helper(int fd, NetworkPacket *packet, size_t afterpacket_extra_size)
+void tcpsocket_blocking_write_helper(int fd, NetworkPacket *packet, size_t afterpacket_extra_size)
 {
 	/* write header */
 
@@ -360,7 +360,7 @@ void tcpthreaded_blocking_write_helper(int fd, NetworkPacket *packet, size_t aft
 
 }
 
-void tcpthreaded_blocking_sendfile_helper(int fd, int fdfile, size_t size)
+void tcpsocket_blocking_sendfile_helper(int fd, int fdfile, size_t size)
 {
 	std::string buf(size, '\0');
 	
@@ -375,7 +375,7 @@ void tcpthreaded_blocking_sendfile_helper(int fd, int fdfile, size_t size)
 		throw std::runtime_error("send sent");
 }
 
-unique_ptr_fd tcpthreaded_file_open_size_helper(const std::string &filename, size_t *o_size)
+unique_ptr_fd tcpsocket_file_open_size_helper(const std::string &filename, size_t *o_size)
 {
 	unique_ptr_fd fdfile(new int(_open(filename.c_str(), _O_RDONLY | _O_BINARY)), TCPSocket::deleteFdFileNotSocket);
 
@@ -392,7 +392,7 @@ unique_ptr_fd tcpthreaded_file_open_size_helper(const std::string &filename, siz
 	return std::move(fdfile);
 }
 
-void tcpthreaded_file_close_helper(int *fd)
+void tcpsocket_file_close_helper(int *fd)
 {
 	if (fd && *fd != -1) {
 		_close(*fd);
@@ -400,7 +400,7 @@ void tcpthreaded_file_close_helper(int *fd)
 	}
 }
 
-void tcpthreaded_startup_helper()
+void tcpsocket_startup_helper()
 {
 	WORD versionRequested = MAKEWORD(1, 1);
 	WSADATA wsaData;
@@ -411,7 +411,7 @@ void tcpthreaded_startup_helper()
 
 #else  /* _WIN32 */
 
-void tcpthreaded_aux_recv(int fd, char *buf, int len)
+void tcpsocket_aux_recv(int fd, char *buf, int len)
 {
 	size_t off = 0;
 	while (off < len) {
@@ -431,7 +431,7 @@ void tcpthreaded_aux_recv(int fd, char *buf, int len)
 	}
 }
 
-void tcpthreaded_socket_close_helper(int *fd)
+void tcpsocket_socket_close_helper(int *fd)
 {
 	if (fd && *fd != -1) {
 		close(*fd);
@@ -439,7 +439,7 @@ void tcpthreaded_socket_close_helper(int *fd)
 	}
 }
 
-unique_ptr_fd tcpthreaded_socket_connecting_helper_gai(addrinfo *addr)
+unique_ptr_fd tcpsocket_socket_connecting_helper_gai(addrinfo *addr)
 {
 	int ret = 0;
 
@@ -457,12 +457,12 @@ unique_ptr_fd tcpthreaded_socket_connecting_helper_gai(addrinfo *addr)
 	throw std::runtime_error("socket");
 }
 
-unique_ptr_fd tcpthreaded_socket_connecting_helper(const char *node, const char *service)
+unique_ptr_fd tcpsocket_socket_connecting_helper(const char *node, const char *service)
 {
-	return tcpthreaded_socket_connecting_helper_gai(do_getaddrinfo_tcp(node, service).get());
+	return tcpsocket_socket_connecting_helper_gai(do_getaddrinfo_tcp(node, service).get());
 }
 
-Address tcpthreaded_socket_peer_helper(int fd)
+Address tcpsocket_socket_peer_helper(int fd)
 {
 	struct sockaddr_storage sockaddr = {};
 	socklen_t socklen = sizeof sockaddr;
@@ -472,7 +472,7 @@ Address tcpthreaded_socket_peer_helper(int fd)
 	return addr;
 }
 
-unique_ptr_fd tcpthreaded_socket_listen_helper(const char *node, const char *service)
+unique_ptr_fd tcpsocket_socket_listen_helper(const char *node, const char *service)
 {
 	unique_ptr_addrinfo res(do_getaddrinfo_tcp_listen(node, service));
 
@@ -490,7 +490,7 @@ unique_ptr_fd tcpthreaded_socket_listen_helper(const char *node, const char *ser
 	throw std::runtime_error("socket listen helper");
 }
 
-unique_ptr_fd tcpthreaded_socket_accept_helper(int fd)
+unique_ptr_fd tcpsocket_socket_accept_helper(int fd)
 {
 	int ret = 0;
 	struct sockaddr_storage sockaddr = {};
@@ -512,7 +512,7 @@ unique_ptr_fd tcpthreaded_socket_accept_helper(int fd)
 	return nsock;
 }
 
-NetworkPacket tcpthreaded_blocking_read_helper(int fd)
+NetworkPacket tcpsocket_blocking_read_helper(int fd)
 {
 	int rcvt = 0;
 
@@ -520,7 +520,7 @@ NetworkPacket tcpthreaded_blocking_read_helper(int fd)
 
 	uint8_t hdr[9] = {};
 
-	tcpthreaded_aux_recv(fd, (char *) hdr, 9);
+	tcpsocket_aux_recv(fd, (char *) hdr, 9);
 
 	/* validate */
 
@@ -536,14 +536,14 @@ NetworkPacket tcpthreaded_blocking_read_helper(int fd)
 	std::vector<uint8_t> buf;
 	buf.resize(sz);
 
-	tcpthreaded_aux_recv(fd, (char *) buf.data(), buf.size());
+	tcpsocket_aux_recv(fd, (char *) buf.data(), buf.size());
 
 	NetworkPacket packet(std::move(buf), networkpacket_vec_steal_tag_t());
 
 	return packet;
 }
 
-void tcpthreaded_blocking_write_helper(int fd, NetworkPacket *packet, size_t afterpacket_extra_size)
+void tcpsocket_blocking_write_helper(int fd, NetworkPacket *packet, size_t afterpacket_extra_size)
 {
 	/* write header */
 
@@ -590,7 +590,7 @@ void tcpthreaded_blocking_write_helper(int fd, NetworkPacket *packet, size_t aft
 	}
 }
 
-void tcpthreaded_blocking_sendfile_helper(int fd, int fdfile, size_t size)
+void tcpsocket_blocking_sendfile_helper(int fd, int fdfile, size_t size)
 {
 	off_t offset = 0;
 	while (offset < size) {
@@ -608,7 +608,7 @@ void tcpthreaded_blocking_sendfile_helper(int fd, int fdfile, size_t size)
 	}
 }
 
-unique_ptr_fd tcpthreaded_file_open_size_helper(const std::string &filename, size_t *o_size)
+unique_ptr_fd tcpsocket_file_open_size_helper(const std::string &filename, size_t *o_size)
 {
 	/* FIXME: does open require handling EINTR ? */
 	unique_ptr_fd fdfile(new int(open(filename.c_str(), O_RDONLY)), TCPSocket::deleteFdFileNotSocket);
@@ -625,7 +625,7 @@ unique_ptr_fd tcpthreaded_file_open_size_helper(const std::string &filename, siz
 	return fdfile;
 }
 
-void tcpthreaded_file_close_helper(int *fd)
+void tcpsocket_file_close_helper(int *fd)
 {
 	if (fd && *fd != -1) {
 		close(*fd);
@@ -633,7 +633,7 @@ void tcpthreaded_file_close_helper(int *fd)
 	}
 }
 
-void tcpthreaded_startup_helper()
+void tcpsocket_startup_helper()
 {
 	/* nothing - windows needs WSAStartup for example */
 }

@@ -245,7 +245,7 @@ int xmain(int argc, char **argv)
 	if (argc >= 2 && std::string(argv[1]) == SELFUP_ARG_VERSUB)
 		return SELFUP_ARG_VERSUB_SUCCESS_CODE;
 
-	tcpthreaded_startup_helper();
+	tcpsocket_startup_helper();
 
 	if (git_libgit2_init() < 0)
 		throw std::runtime_error("libgit2 init");

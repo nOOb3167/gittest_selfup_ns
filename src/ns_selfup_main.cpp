@@ -479,7 +479,7 @@ void global_initialization()
 {
 	/* init */
 
-	tcpthreaded_startup_helper();
+	tcpsocket_startup_helper();
 
 #ifdef NS_DEF_USING_LIBGIT2
 	if (git_libgit2_init() < 0)

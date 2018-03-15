@@ -125,17 +125,17 @@ public:
 	static void dump(addrinfo *addr, uint32_t magic, const char * data, size_t data_len);
 };
 
-void tcpthreaded_socket_close_helper(int *fd);
-unique_ptr_fd tcpthreaded_socket_connecting_helper_gai(addrinfo *addr);
-unique_ptr_fd tcpthreaded_socket_connecting_helper(const char *node, const char *service);
-Address tcpthreaded_socket_peer_helper(int fd);
-unique_ptr_fd tcpthreaded_socket_listen_helper(const char *node, const char *service);
-unique_ptr_fd tcpthreaded_socket_accept_helper(int fd);
-NetworkPacket tcpthreaded_blocking_read_helper(int fd);
-void tcpthreaded_blocking_write_helper(int fd, NetworkPacket *packet, size_t afterpacket_extra_size);
-void tcpthreaded_blocking_sendfile_helper(int fd, int fdfile, size_t size);
-unique_ptr_fd tcpthreaded_file_open_size_helper(const std::string &filename, size_t *o_size);
-void tcpthreaded_file_close_helper(int *fd);
-void tcpthreaded_startup_helper();
+void tcpsocket_socket_close_helper(int *fd);
+unique_ptr_fd tcpsocket_socket_connecting_helper_gai(addrinfo *addr);
+unique_ptr_fd tcpsocket_socket_connecting_helper(const char *node, const char *service);
+Address tcpsocket_socket_peer_helper(int fd);
+unique_ptr_fd tcpsocket_socket_listen_helper(const char *node, const char *service);
+unique_ptr_fd tcpsocket_socket_accept_helper(int fd);
+NetworkPacket tcpsocket_blocking_read_helper(int fd);
+void tcpsocket_blocking_write_helper(int fd, NetworkPacket *packet, size_t afterpacket_extra_size);
+void tcpsocket_blocking_sendfile_helper(int fd, int fdfile, size_t size);
+unique_ptr_fd tcpsocket_file_open_size_helper(const std::string &filename, size_t *o_size);
+void tcpsocket_file_close_helper(int *fd);
+void tcpsocket_startup_helper();
 
 #endif /* _TCPASYNC_H_ */

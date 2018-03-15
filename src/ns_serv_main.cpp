@@ -214,7 +214,7 @@ int main(int argc, char **argv)
 {
 	int ret = 0;
 
-	tcpthreaded_startup_helper();
+	tcpsocket_startup_helper();
 
 	ns_conf::Conf::initGlobal();
 	ns_log::NsLog::initGlobal();
