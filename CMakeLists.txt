@@ -86,7 +86,6 @@ SET(SELFUP_NS_SOURCES
 	src/ns_selfup_aux.cpp
 	src/ns_systemd.cpp
 	src/ns_selfup_main.cpp
-	src/ns_selfup_ex.cpp
 )
 
 SET(SERV_NS_HEADERS
@@ -99,6 +98,28 @@ SET(SERV_NS_SOURCES
 	src/ns_serv_main.cpp
 	src/ns_systemd.cpp
 	src/TCPAsync.cpp
+)
+
+SET(EX_NS_HEADERS
+	include/selfup/NetworkPacket.h
+	include/selfup/ns_filesys.h
+	include/selfup/ns_git_aux.h
+	include/selfup/ns_git_shims.h
+	include/selfup/ns_helpers.h
+	include/selfup/ns_ex.h
+	include/selfup/TCPAddress.h
+	include/selfup/TCPSocket.h
+)
+SET(EX_NS_SOURCES
+	src/NetworkPacket.cpp
+	src/ns_filesys.cpp
+	src/ns_git_aux.cpp
+	src/ns_git_shims.cpp
+	src/ns_helpers.cpp
+	src/ns_ex.cpp
+	src/ns_ex_main.cpp
+	src/TCPAddress.cpp
+	src/TCPSocket.cpp
 )
 
 SET(ZLIB_INCLUDE_DIR "-NOTFOUND" CACHE PATH "ZLIB include dir")
@@ -126,6 +147,16 @@ TARGET_COMPILE_OPTIONS(selfup_ns PUBLIC /wd4101) # grrrr
 TARGET_LINK_LIBRARIES(selfup_ns Threads::Threads ${LIBGIT2_LIBRARIES} ${ZLIB_LIBRARIES} ${SHLWAPI_LIBRARIES})
 TARGET_LINK_LIBRARIES(selfup_ns msimg32) # grrrr
 TARGET_INCLUDE_DIRECTORIES(selfup_ns PUBLIC ${CMAKE_BINARY_DIR} ${CMAKE_SOURCE_DIR}/include ${LIBGIT2_INCLUDE_DIR} ${ZLIB_INCLUDE_DIR})
+ENDIF()
+
+IF(WIN32)
+ADD_EXECUTABLE(ex_ns ${EX_NS_HEADERS} ${EX_NS_SOURCES})
+SET_PROPERTY(TARGET ex_ns PROPERTY SUFFIX ".exe")
+TARGET_COMPILE_DEFINITIONS(ex_ns PUBLIC NS_DEF_USING_LIBGIT2)
+TARGET_COMPILE_DEFINITIONS(ex_ns PUBLIC _CRT_SECURE_NO_WARNINGS) # grrrr
+TARGET_COMPILE_OPTIONS(ex_ns PUBLIC /wd4101) # grrrr
+TARGET_LINK_LIBRARIES(ex_ns Threads::Threads ${LIBGIT2_LIBRARIES} ${ZLIB_LIBRARIES} ${SHLWAPI_LIBRARIES})
+TARGET_INCLUDE_DIRECTORIES(ex_ns PUBLIC ${CMAKE_BINARY_DIR} ${CMAKE_SOURCE_DIR}/include ${LIBGIT2_INCLUDE_DIR} ${ZLIB_INCLUDE_DIR})
 ENDIF()
 
 ADD_EXECUTABLE(serv_ns ${SERV_NS_HEADERS} ${SERV_NS_SOURCES})
@@ -161,8 +192,8 @@ IF(NS_OPTION_ARCHIVE)
 ENDIF()
 
 IF(WIN32)
-  set(NS_MAYBE_SELFUP_NS selfup_ns)
-  set(NS_MAYBE_PDB $<TARGET_PDB_FILE:selfup_ns> $<TARGET_PDB_FILE:serv_ns>)
+  set(NS_MAYBE_SELFUP_NS selfup_ns ex_ns)
+  set(NS_MAYBE_PDB $<TARGET_PDB_FILE:selfup_ns> $<TARGET_PDB_FILE:ex_ns> $<TARGET_PDB_FILE:serv_ns>)
 ENDIF()
 
 INSTALL(TARGETS serv_ns ${NS_MAYBE_SELFUP_NS}
