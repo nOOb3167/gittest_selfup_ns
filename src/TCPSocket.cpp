@@ -1,3 +1,6 @@
+#include <cstring>
+
+#include <selfup/ns_helpers.h>
 #include <selfup/TCPSocket.h>
 
 int g_tcpsocket_disable_timeout = 0;
