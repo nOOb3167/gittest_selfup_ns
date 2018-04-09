@@ -2,6 +2,7 @@
 #include <string>
 
 #include <selfup/ns_ex.h>
+#include <selfup/ns_ex_config.h>
 #include <selfup/ns_filesys.h>
 
 int main(int argc, char **argv)
@@ -14,6 +15,8 @@ int main(int argc, char **argv)
 	if (git_libgit2_init() < 0)
 		throw std::runtime_error("libgit2 init");
 
+	NsExConfig::initGlobal();
+
 	std::string cur_exe_filename = ns_filesys::current_executable_filename();
 	std::string repopath = ns_filesys::current_executable_relative_filename("clnt_repo/.git");
 	std::string refname_selfup = "refs/heads/selfup";
@@ -22,8 +25,8 @@ int main(int argc, char **argv)
 	std::string chkoutpath_mainup = ns_filesys::current_executable_relative_filename("clnt_chkout");
 	std::string chkoutpath_stage2 = ns_filesys::current_executable_relative_filename("stage2_chkout");
 
-	const char *node = "10.55.1.6";
-	const char *service = "6757";
+	const char *node = NsExConfig::get("serv_conn_addr");
+	const char *service = NsExConfig::get("serv_port");
 
 	SelfupUpdater::updateOneshot(node, service, repopath, refname_selfup);
 

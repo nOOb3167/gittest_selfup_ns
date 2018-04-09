@@ -2,6 +2,7 @@ CMAKE_MINIMUM_REQUIRED(VERSION 3.0)
 
 PROJECT (selfup_ns)
 
+OPTION(NS_OPTION_EX_CONFIG_EXTRA OFF)
 OPTION(NS_OPTION_ARCHIVE "archive" OFF)
 SET(NS_ARCHIVE_FILE "${CMAKE_BINARY_DIR}/selfup_ns.zip" CACHE FILEPATH "archive path")
 
@@ -107,6 +108,7 @@ SET(EX_NS_HEADERS
 	include/selfup/ns_git_shims.h
 	include/selfup/ns_helpers.h
 	include/selfup/ns_ex.h
+	include/selfup/ns_ex_config.h
 	include/selfup/TCPAddress.h
 	include/selfup/TCPSocket.h
 )
@@ -117,6 +119,7 @@ SET(EX_NS_SOURCES
 	src/ns_git_shims.cpp
 	src/ns_helpers.cpp
 	src/ns_ex.cpp
+	src/ns_ex_config.cpp
 	src/ns_ex_main.cpp
 	src/TCPAddress.cpp
 	src/TCPSocket.cpp
@@ -154,6 +157,9 @@ ADD_EXECUTABLE(ex_ns ${EX_NS_HEADERS} ${EX_NS_SOURCES})
 SET_PROPERTY(TARGET ex_ns PROPERTY SUFFIX ".exe")
 TARGET_COMPILE_DEFINITIONS(ex_ns PUBLIC NS_DEF_USING_LIBGIT2)
 TARGET_COMPILE_DEFINITIONS(ex_ns PUBLIC _CRT_SECURE_NO_WARNINGS) # grrrr
+IF(NS_OPTION_EX_CONFIG_EXTRA)
+COMPILE_DEFINITIONS(ex_ns PUBLIC NS_EX_CONFIG_EXTRA_HAVE)
+ENDIF()
 TARGET_COMPILE_OPTIONS(ex_ns PUBLIC /wd4101) # grrrr
 TARGET_LINK_LIBRARIES(ex_ns Threads::Threads ${LIBGIT2_LIBRARIES} ${ZLIB_LIBRARIES} ${SHLWAPI_LIBRARIES})
 TARGET_INCLUDE_DIRECTORIES(ex_ns PUBLIC ${CMAKE_BINARY_DIR} ${CMAKE_SOURCE_DIR}/include ${LIBGIT2_INCLUDE_DIR} ${ZLIB_INCLUDE_DIR})
